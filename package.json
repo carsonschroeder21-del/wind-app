@@ -1,0 +1,35 @@
+{
+  "name": "wind-scout",
+  "version": "1.0.0",
+  "main": "index.ts",
+  "dependencies": {
+    "@react-native-async-storage/async-storage": "^3.1.1",
+    "@react-native-community/slider": "^5.2.0",
+    "expo": "~57.0.11",
+    "expo-constants": "^57.0.9",
+    "expo-dev-client": "^57.0.10",
+    "expo-haptics": "^57.0.1",
+    "expo-status-bar": "~57.0.1",
+    "lucide-react-native": "^1.29.0",
+    "react": "19.2.3",
+    "react-native": "0.86.2",
+    "react-native-ble-plx": "^3.5.1",
+    "react-native-safe-area-context": "^5.8.1",
+    "react-native-svg": "^15.15.5",
+    "zustand": "^5.0.14"
+  },
+  "devDependencies": {
+    "@types/react": "~19.2.2",
+    "typescript": "~6.0.3"
+  },
+  "scripts": {
+    "start": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "web": "expo start --web",
+    "dev-client": "expo start --dev-client",
+    "prebuild": "expo prebuild",
+    "typecheck": "tsc --noEmit"
+  },
+  "private": true
+}
