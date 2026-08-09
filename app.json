@@ -28,6 +28,15 @@
     "web": {
       "favicon": "./assets/favicon.png"
     },
-    "plugins": ["expo-dev-client", "./plugins/withBluetoothPermissions"]
+    "plugins": [
+      "expo-dev-client",
+      "./plugins/withBluetoothPermissions",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Wind Scout uses your location to tag saved stands and look up their elevation."
+        }
+      ]
+    ]
   }
 }

@@ -23,7 +23,7 @@ function isQuietHours(date: Date): boolean {
  * the Alerts screen's buzz/sensitivity/quiet-hours settings. Mounted once at the app root. */
 export function useBadWindAlerts() {
   const wind = useAppStore((s) => s.wind);
-  const standFacingDeg = useAppStore((s) => s.standFacingDeg);
+  const standFacingDeg = useAppStore((s) => s.stands.find((stand) => stand.id === s.activeStandId)?.facingDeg ?? null);
   const buzzOn = useAppStore((s) => s.buzzOn);
   const sensitivity = useAppStore((s) => s.sensitivity);
   const quietHoursOn = useAppStore((s) => s.quietHoursOn);
@@ -33,6 +33,8 @@ export function useBadWindAlerts() {
   const lastAlertDirRef = useRef<number | null>(null);
 
   useEffect(() => {
+    if (standFacingDeg == null) return;
+
     const isBad = isWindUnfavorable(wind.directionDeg, standFacingDeg);
 
     if (!isBad) {

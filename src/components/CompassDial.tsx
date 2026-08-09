@@ -7,45 +7,37 @@ import { isWindUnfavorable } from '../utils/compass';
 interface CompassDialProps {
   /** Direction the wind is blowing FROM, in degrees. */
   windDir: number;
-  /** Direction the hunter's stand faces (where game is expected), in degrees. */
-  standFacing: number;
+  /** Direction the hunter expects game to come from (the active stand's facing), in
+   * degrees. Pass null when there's no active stand to compare against. */
+  standFacing: number | null;
   size?: number;
 }
 
 const CARDINALS = ['N', 'E', 'S', 'W'];
+const CONE_HALF_ANGLE_DEG = 16;
 
 export function CompassDial({ windDir, standFacing, size = 240 }: CompassDialProps) {
   const cx = size / 2;
   const cy = size / 2;
   const r = size / 2 - 24;
+  const coneRadius = r - 8;
+  const gameLineRadius = r - 4;
 
   const toXY = (deg: number, radius = r): [number, number] => {
     const rad = ((deg - 90) * Math.PI) / 180;
     return [cx + radius * Math.cos(rad), cy + radius * Math.sin(rad)];
   };
 
-  // windDir is where the wind is coming FROM; the arrow shows where it's headed.
+  // windDir is where the wind is coming FROM; the cone shows where it's headed.
   const goingDir = (windDir + 180) % 360;
-  const [tipX, tipY] = toXY(goingDir);
+  const isBad = standFacing != null && isWindUnfavorable(windDir, standFacing);
+  const coneColor = standFacing == null ? palette.amber : isBad ? palette.bad : palette.good;
 
-  const isBad = isWindUnfavorable(windDir, standFacing);
-  const arrowColor = isBad ? palette.bad : palette.good;
+  const [tipX, tipY] = toXY(goingDir, coneRadius);
+  const [leftX, leftY] = toXY(goingDir - CONE_HALF_ANGLE_DEG, coneRadius);
+  const [rightX, rightY] = toXY(goingDir + CONE_HALF_ANGLE_DEG, coneRadius);
 
-  const headLen = 16;
-  const headWidth = 10;
-  const rad = ((goingDir - 90) * Math.PI) / 180;
-  const dirX = Math.cos(rad);
-  const dirY = Math.sin(rad);
-  const perpX = -dirY;
-  const perpY = dirX;
-  const baseX = tipX - dirX * headLen;
-  const baseY = tipY - dirY * headLen;
-  const leftX = baseX + perpX * headWidth * 0.5;
-  const leftY = baseY + perpY * headWidth * 0.5;
-  const rightX = baseX - perpX * headWidth * 0.5;
-  const rightY = baseY - perpY * headWidth * 0.5;
-
-  const [standX, standY] = toXY(standFacing);
+  const gameLineEnd = standFacing != null ? toXY(standFacing, gameLineRadius) : null;
 
   return (
     <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
@@ -68,15 +60,38 @@ export function CompassDial({ windDir, standFacing, size = 240 }: CompassDialPro
         );
       })}
 
-      {/* stand facing marker */}
-      <Line x1={cx} y1={cy} x2={standX} y2={standY} stroke={palette.textLo} strokeWidth={2} strokeDasharray="3,4" />
-      <Circle cx={standX} cy={standY} r={4} fill={palette.textLo} />
-
-      {/* wind arrow — points where the wind is traveling */}
+      {/* wind cone — the fan of directions the wind could realistically be carrying scent
+          through, narrow at the stand (apex) and widening as it travels outward */}
       <G>
-        <Line x1={cx} y1={cy} x2={baseX} y2={baseY} stroke={arrowColor} strokeWidth={3} strokeLinecap="round" />
-        <Polygon points={`${tipX},${tipY} ${leftX},${leftY} ${rightX},${rightY}`} fill={arrowColor} />
+        <Polygon
+          points={`${cx},${cy} ${leftX},${leftY} ${rightX},${rightY}`}
+          fill={`${coneColor}33`}
+          stroke={coneColor}
+          strokeWidth={1}
+          strokeLinejoin="round"
+        />
+        <Line x1={cx} y1={cy} x2={tipX} y2={tipY} stroke={coneColor} strokeWidth={2} strokeLinecap="round" />
+        <Circle cx={tipX} cy={tipY} r={3} fill={coneColor} />
       </G>
+
+      {/* expected game direction — visually distinct (cool color, fine dotted line) so it
+          reads clearly against the cone whether they overlap (bad) or diverge (good) */}
+      {gameLineEnd && (
+        <G>
+          <Line
+            x1={cx}
+            y1={cy}
+            x2={gameLineEnd[0]}
+            y2={gameLineEnd[1]}
+            stroke={palette.gameDir}
+            strokeWidth={2}
+            strokeDasharray="1,5"
+            strokeLinecap="round"
+          />
+          <Circle cx={gameLineEnd[0]} cy={gameLineEnd[1]} r={4} fill={palette.gameDir} />
+        </G>
+      )}
+
       <Circle cx={cx} cy={cy} r={4} fill={palette.amber} />
     </Svg>
   );

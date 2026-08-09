@@ -6,10 +6,12 @@ import type {
   AlertSensitivity,
   BraceletStatus,
   HuntLogEntry,
-  Terrain,
+  Stand,
+  ThermalLogEntry,
   WindReading,
   WindSensorStatus,
 } from '../types';
+import { genId } from '../utils/id';
 
 const SEED_LOG: HuntLogEntry[] = [
   {
@@ -41,18 +43,35 @@ const SEED_LOG: HuntLogEntry[] = [
   },
 ];
 
+function createDefaultStand(): Stand {
+  const now = Date.now();
+  return {
+    id: genId(),
+    name: 'My Stand',
+    terrain: 'Timber',
+    isEdge: false,
+    facingDeg: 120,
+    latitude: null,
+    longitude: null,
+    elevationFt: null,
+    gameAreaRelativeElevation: 'level',
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+const SEED_STAND = createDefaultStand();
+
 interface AppState {
   wind: WindReading;
   setWind: (reading: WindReading) => void;
 
-  standFacingDeg: number;
-  setStandFacing: (deg: number) => void;
-  terrain: Terrain;
-  setTerrain: (terrain: Terrain) => void;
-  isEdge: boolean;
-  setIsEdge: (isEdge: boolean) => void;
-  standSavedAt: number | null;
-  saveStand: () => void;
+  stands: Stand[];
+  activeStandId: string | null;
+  addStand: (input: Omit<Stand, 'id' | 'createdAt' | 'updatedAt'>) => string;
+  updateStand: (id: string, patch: Partial<Omit<Stand, 'id' | 'createdAt' | 'updatedAt'>>) => void;
+  deleteStand: (id: string) => void;
+  setActiveStandId: (id: string) => void;
 
   buzzOn: boolean;
   setBuzzOn: (on: boolean) => void;
@@ -68,6 +87,9 @@ interface AppState {
 
   huntLog: HuntLogEntry[];
   addHuntLogEntry: (entry: HuntLogEntry) => void;
+
+  thermalLogs: ThermalLogEntry[];
+  addThermalLogEntry: (entry: ThermalLogEntry) => void;
 }
 
 export const useAppStore = create<AppState>()(
@@ -76,14 +98,29 @@ export const useAppStore = create<AppState>()(
       wind: { directionDeg: 300, speedMph: 6, updatedAt: Date.now() },
       setWind: (wind) => set({ wind }),
 
-      standFacingDeg: 120,
-      setStandFacing: (standFacingDeg) => set({ standFacingDeg }),
-      terrain: 'Timber',
-      setTerrain: (terrain) => set({ terrain }),
-      isEdge: false,
-      setIsEdge: (isEdge) => set({ isEdge }),
-      standSavedAt: null,
-      saveStand: () => set({ standSavedAt: Date.now() }),
+      stands: [SEED_STAND],
+      activeStandId: SEED_STAND.id,
+
+      addStand: (input) => {
+        const now = Date.now();
+        const stand: Stand = { ...input, id: genId(), createdAt: now, updatedAt: now };
+        set((s) => ({ stands: [...s.stands, stand] }));
+        return stand.id;
+      },
+
+      updateStand: (id, patch) =>
+        set((s) => ({
+          stands: s.stands.map((stand) => (stand.id === id ? { ...stand, ...patch, updatedAt: Date.now() } : stand)),
+        })),
+
+      deleteStand: (id) =>
+        set((s) => {
+          const stands = s.stands.filter((stand) => stand.id !== id);
+          const activeStandId = s.activeStandId === id ? (stands[0]?.id ?? null) : s.activeStandId;
+          return { stands, activeStandId };
+        }),
+
+      setActiveStandId: (activeStandId) => set({ activeStandId }),
 
       buzzOn: true,
       setBuzzOn: (buzzOn) => set({ buzzOn }),
@@ -99,23 +136,45 @@ export const useAppStore = create<AppState>()(
 
       huntLog: SEED_LOG,
       addHuntLogEntry: (entry) => set((s) => ({ huntLog: [entry, ...s.huntLog] })),
+
+      thermalLogs: [],
+      addThermalLogEntry: (entry) => set((s) => ({ thermalLogs: [entry, ...s.thermalLogs] })),
     }),
     {
       name: 'wind-scout-storage',
+      version: 2,
       storage: createJSONStorage(() => AsyncStorage),
       // Live sensor/BLE connection state and the current wind reading are runtime-only —
       // only persist the durable settings and history a hunter would expect to survive
       // an app restart.
       partialize: (state) => ({
-        standFacingDeg: state.standFacingDeg,
-        terrain: state.terrain,
-        isEdge: state.isEdge,
-        standSavedAt: state.standSavedAt,
+        stands: state.stands,
+        activeStandId: state.activeStandId,
         buzzOn: state.buzzOn,
         sensitivity: state.sensitivity,
         quietHoursOn: state.quietHoursOn,
         huntLog: state.huntLog,
+        thermalLogs: state.thermalLogs,
       }),
+      // v1 stored a single flat stand (standFacingDeg/terrain/isEdge) instead of a
+      // stands[] list — no real users yet, so just reseed a default stand rather than
+      // writing a field-by-field migration for a shape that never shipped.
+      migrate: (persistedState, version) => {
+        if (version < 2) {
+          const stand = createDefaultStand();
+          return {
+            stands: [stand],
+            activeStandId: stand.id,
+            huntLog: SEED_LOG,
+            thermalLogs: [],
+          } as unknown as AppState;
+        }
+        return persistedState as AppState;
+      },
     },
   ),
 );
+
+export function getActiveStand(state: AppState): Stand | null {
+  return state.stands.find((s) => s.id === state.activeStandId) ?? null;
+}

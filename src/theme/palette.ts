@@ -10,4 +10,7 @@ export const palette = {
   textHi: '#f0ead8',
   textLo: '#9aa085',
   onAmber: '#191b12',
+  // Cool, deliberately off-palette so the "expected game direction" line on the compass
+  // never gets lost against the warm amber/green/red wind cone.
+  gameDir: '#5b9bd1',
 } as const;
