@@ -1,13 +1,16 @@
 import { Pencil, Plus, Trash2 } from 'lucide-react-native';
 import { useState } from 'react';
-import { Alert, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, FlatList, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { AllStandsMap } from '../components/AllStandsMap';
 import { StandEditor } from '../components/StandEditor';
 import { useAppStore } from '../state/store';
 import { palette } from '../theme/palette';
 import { mono } from '../theme/typography';
 import type { Stand } from '../types';
 import { toCompass } from '../utils/compass';
+
+type StandView = 'list' | 'map';
 
 export function StandScreen() {
   const stands = useAppStore((s) => s.stands);
@@ -16,6 +19,7 @@ export function StandScreen() {
   const deleteStand = useAppStore((s) => s.deleteStand);
 
   const [editingStandId, setEditingStandId] = useState<string | null | 'new'>(null);
+  const [view, setView] = useState<StandView>('list');
 
   if (editingStandId !== null) {
     return (
@@ -40,54 +44,77 @@ export function StandScreen() {
         <Text style={styles.addButtonText}>Add Stand</Text>
       </Pressable>
 
-      <FlatList
-        data={stands}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.list}
-        ListEmptyComponent={
-          <Text style={styles.emptyText}>No stands saved yet — add one above.</Text>
-        }
-        renderItem={({ item }) => {
-          const active = item.id === activeStandId;
-          return (
-            <Pressable
-              onPress={() => setActiveStandId(item.id)}
-              style={[styles.card, active && styles.cardActive]}
-            >
-              <View style={styles.cardTop}>
-                <View style={styles.nameRow}>
-                  <Text style={styles.name}>{item.name}</Text>
-                  {active && (
-                    <View style={styles.activeBadge}>
-                      <Text style={styles.activeBadgeText}>ACTIVE</Text>
-                    </View>
-                  )}
-                </View>
-                <View style={styles.cardActions}>
-                  <Pressable onPress={() => setEditingStandId(item.id)} hitSlop={8} style={styles.iconButton}>
-                    <Pencil size={16} color={palette.textLo} />
-                  </Pressable>
-                  <Pressable onPress={() => handleDelete(item)} hitSlop={8} style={styles.iconButton}>
-                    <Trash2 size={16} color={palette.bad} />
-                  </Pressable>
-                </View>
-              </View>
+      <View style={styles.segmentRow}>
+        <SegmentButton label="List" active={view === 'list'} onPress={() => setView('list')} />
+        <SegmentButton label="Map" active={view === 'map'} onPress={() => setView('map')} />
+      </View>
 
-              <View style={styles.metaRow}>
-                <Text style={styles.metaText}>
-                  {item.terrain}
-                  {item.isEdge ? ' · Edge' : ''}
-                </Text>
-                <Text style={styles.metaText}>Facing {toCompass(item.facingDeg)}</Text>
-                <Text style={styles.metaText}>{item.elevationFt != null ? `${item.elevationFt} ft` : 'Elevation unknown'}</Text>
-              </View>
+      {view === 'map' ? (
+        <ScrollView contentContainerStyle={styles.mapScroll}>
+          <AllStandsMap
+            stands={stands}
+            activeStandId={activeStandId}
+            onSelectStand={(id) => setEditingStandId(id)}
+          />
+        </ScrollView>
+      ) : (
+        <FlatList
+          data={stands}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.list}
+          ListEmptyComponent={<Text style={styles.emptyText}>No stands saved yet — add one above.</Text>}
+          renderItem={({ item }) => {
+            const active = item.id === activeStandId;
+            return (
+              <Pressable
+                onPress={() => setActiveStandId(item.id)}
+                style={[styles.card, active && styles.cardActive]}
+              >
+                <View style={styles.cardTop}>
+                  <View style={styles.nameRow}>
+                    <Text style={styles.name}>{item.name}</Text>
+                    {active && (
+                      <View style={styles.activeBadge}>
+                        <Text style={styles.activeBadgeText}>ACTIVE</Text>
+                      </View>
+                    )}
+                  </View>
+                  <View style={styles.cardActions}>
+                    <Pressable onPress={() => setEditingStandId(item.id)} hitSlop={8} style={styles.iconButton}>
+                      <Pencil size={16} color={palette.textLo} />
+                    </Pressable>
+                    <Pressable onPress={() => handleDelete(item)} hitSlop={8} style={styles.iconButton}>
+                      <Trash2 size={16} color={palette.bad} />
+                    </Pressable>
+                  </View>
+                </View>
 
-              {!active && <Text style={styles.tapHint}>Tap to set active</Text>}
-            </Pressable>
-          );
-        }}
-      />
+                <View style={styles.metaRow}>
+                  <Text style={styles.metaText}>
+                    {item.terrain}
+                    {item.isEdge ? ' · Edge' : ''}
+                  </Text>
+                  <Text style={styles.metaText}>Facing {toCompass(item.facingDeg)}</Text>
+                  <Text style={styles.metaText}>
+                    {item.elevationFt != null ? `${item.elevationFt} ft` : 'Elevation unknown'}
+                  </Text>
+                </View>
+
+                {!active && <Text style={styles.tapHint}>Tap to set active</Text>}
+              </Pressable>
+            );
+          }}
+        />
+      )}
     </View>
+  );
+}
+
+function SegmentButton({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
+  return (
+    <Pressable onPress={onPress} style={[styles.segmentButton, active && styles.segmentButtonActive]}>
+      <Text style={[styles.segmentButtonText, active && styles.segmentButtonTextActive]}>{label}</Text>
+    </Pressable>
   );
 }
 
@@ -104,6 +131,20 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   addButtonText: { color: palette.onAmber, fontSize: 13, fontWeight: '500' },
+  segmentRow: { flexDirection: 'row', gap: 8, marginBottom: 16 },
+  segmentButton: {
+    flex: 1,
+    paddingVertical: 8,
+    borderRadius: 8,
+    alignItems: 'center',
+    backgroundColor: palette.panel,
+    borderWidth: 1,
+    borderColor: palette.line,
+  },
+  segmentButtonActive: { backgroundColor: palette.amber, borderColor: palette.amber },
+  segmentButtonText: { color: palette.textLo, fontSize: 12 },
+  segmentButtonTextActive: { color: palette.onAmber, fontWeight: '500' },
+  mapScroll: { paddingBottom: 16 },
   list: { paddingBottom: 16, gap: 12 },
   emptyText: { color: palette.textLo, fontSize: 13, textAlign: 'center', marginTop: 24 },
   card: {

@@ -1,9 +1,8 @@
 import Slider from '@react-native-community/slider';
-import { Check, LocateFixed, MapPin, Trash2 } from 'lucide-react-native';
+import { Check, LocateFixed, Trash2 } from 'lucide-react-native';
 import { useState } from 'react';
-import type { LayoutChangeEvent } from 'react-native';
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
-import Svg, { Line } from 'react-native-svg';
+import type { LatLng } from 'react-native-maps';
 
 import { fetchElevationFt } from '../services/elevation';
 import { getCurrentLocation } from '../services/location';
@@ -13,56 +12,14 @@ import { mono } from '../theme/typography';
 import { GAME_AREA_RELATIVE_ELEVATIONS, TERRAIN_TYPES } from '../types';
 import type { GameAreaRelativeElevation, Stand, Terrain } from '../types';
 import { toCompass } from '../utils/compass';
+import { StandMapPicker } from './StandMapPicker';
 import { ToggleSwitch } from './ToggleSwitch';
-
-const GRID_SPACING = 20;
-const MAP_HEIGHT = 120;
 
 const RELATIVE_ELEVATION_LABELS: Record<GameAreaRelativeElevation, string> = {
   above: 'Above',
   level: 'Level with',
   below: 'Below',
 };
-
-function MapGridBackground() {
-  const [width, setWidth] = useState(0);
-  const onLayout = (e: LayoutChangeEvent) => setWidth(e.nativeEvent.layout.width);
-  const cols = Math.ceil(width / GRID_SPACING);
-  const rows = Math.ceil(MAP_HEIGHT / GRID_SPACING);
-
-  return (
-    <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} onLayout={onLayout}>
-      {width > 0 && (
-        <Svg width={width} height={MAP_HEIGHT}>
-          {Array.from({ length: cols }, (_, i) => (
-            <Line
-              key={`v${i}`}
-              x1={i * GRID_SPACING}
-              y1={0}
-              x2={i * GRID_SPACING}
-              y2={MAP_HEIGHT}
-              stroke={palette.line}
-              strokeWidth={1}
-              opacity={0.2}
-            />
-          ))}
-          {Array.from({ length: rows }, (_, i) => (
-            <Line
-              key={`h${i}`}
-              x1={0}
-              y1={i * GRID_SPACING}
-              x2={width}
-              y2={i * GRID_SPACING}
-              stroke={palette.line}
-              strokeWidth={1}
-              opacity={0.2}
-            />
-          ))}
-        </Svg>
-      )}
-    </View>
-  );
-}
 
 interface StandEditorProps {
   /** null when creating a new stand. */
@@ -93,6 +50,19 @@ export function StandEditor({ standId, onDone }: StandEditorProps) {
   const [locationError, setLocationError] = useState<string | null>(null);
   const [nameError, setNameError] = useState(false);
 
+  /** Single funnel for every way a coordinate can be set — map tap, marker drag, or the
+   * GPS button — so elevation lookup always follows consistently. */
+  const handleLocationChange = async (coords: LatLng) => {
+    setLatitude(coords.latitude);
+    setLongitude(coords.longitude);
+    setLocationError(null);
+
+    setElevationLoading(true);
+    const ft = await fetchElevationFt(coords.latitude, coords.longitude);
+    setElevationLoading(false);
+    setElevationFt(ft);
+  };
+
   const handleUseCurrentLocation = async () => {
     setLocating(true);
     setLocationError(null);
@@ -108,13 +78,7 @@ export function StandEditor({ standId, onDone }: StandEditorProps) {
       return;
     }
 
-    setLatitude(result.location.latitude);
-    setLongitude(result.location.longitude);
-
-    setElevationLoading(true);
-    const ft = await fetchElevationFt(result.location.latitude, result.location.longitude);
-    setElevationLoading(false);
-    setElevationFt(ft);
+    await handleLocationChange(result.location);
   };
 
   const handleRefreshElevation = async () => {
@@ -248,19 +212,7 @@ export function StandEditor({ standId, onDone }: StandEditorProps) {
       </View>
 
       <Text style={styles.sectionLabel}>LOCATION</Text>
-      <View style={styles.map}>
-        <MapGridBackground />
-        <View style={styles.mapContent}>
-          <MapPin size={24} color={palette.amber} />
-          {latitude != null && longitude != null ? (
-            <Text style={styles.coordsText}>
-              {latitude.toFixed(4)}, {longitude.toFixed(4)}
-            </Text>
-          ) : (
-            <Text style={styles.mapHint}>No location saved yet</Text>
-          )}
-        </View>
-      </View>
+      <StandMapPicker latitude={latitude} longitude={longitude} onPick={handleLocationChange} height={200} />
 
       <Pressable onPress={handleUseCurrentLocation} disabled={locating} style={styles.locationButton}>
         {locating ? (
@@ -273,6 +225,11 @@ export function StandEditor({ standId, onDone }: StandEditorProps) {
         )}
       </Pressable>
       {locationError && <Text style={styles.errorText}>{locationError}</Text>}
+      {latitude != null && longitude != null && (
+        <Text style={styles.coordsText}>
+          {latitude.toFixed(4)}, {longitude.toFixed(4)}
+        </Text>
+      )}
 
       <View style={styles.elevationRow}>
         <Text style={styles.elevationText}>
@@ -341,19 +298,7 @@ const styles = StyleSheet.create({
   sliderLabels: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 },
   sliderEdgeLabel: { color: palette.textLo, fontSize: 11 },
   sliderValue: { color: palette.amber, fontFamily: mono, fontSize: 14 },
-  map: {
-    height: MAP_HEIGHT,
-    borderRadius: 8,
-    backgroundColor: palette.panel,
-    borderWidth: 1,
-    borderColor: palette.line,
-    overflow: 'hidden',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  mapContent: { alignItems: 'center', gap: 4 },
-  mapHint: { color: palette.textLo, fontSize: 11 },
-  coordsText: { color: palette.textHi, fontSize: 12, fontFamily: mono },
+  coordsText: { color: palette.textLo, fontSize: 11, marginTop: 8, fontFamily: mono },
   locationButton: {
     marginTop: 10,
     borderRadius: 8,
