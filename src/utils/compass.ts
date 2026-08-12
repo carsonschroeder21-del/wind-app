@@ -17,8 +17,11 @@ export function angularDiff(a: number, b: number): number {
 
 const BAD_WIND_THRESHOLD_DEG = 55;
 
-/** True when wind blowing from `windDirectionDeg` is roughly opposite the hunter's
- * `standFacingDeg` — i.e. likely to carry scent toward the game area. */
+/** True when the wind is carrying scent toward the hunter's `standFacingDeg` (the
+ * expected game direction) — i.e. the direction the wind is actually blowing TOWARD
+ * (`windDirectionDeg + 180`, since `windDirectionDeg` itself is where it's coming FROM)
+ * roughly lines up with where the game is expected. */
 export function isWindUnfavorable(windDirectionDeg: number, standFacingDeg: number): boolean {
-  return angularDiff(windDirectionDeg, standFacingDeg) < BAD_WIND_THRESHOLD_DEG;
+  const goingDir = (windDirectionDeg + 180) % 360;
+  return angularDiff(goingDir, standFacingDeg) < BAD_WIND_THRESHOLD_DEG;
 }
