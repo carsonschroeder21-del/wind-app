@@ -15,13 +15,13 @@ import { useAppStore } from '../state/store';
 import { palette } from '../theme/palette';
 import { mono } from '../theme/typography';
 import type { WeatherPoint, WindReading } from '../types';
-import { isWindUnfavorable, toCompass } from '../utils/compass';
+import { isWindUnfavorable, toCompass, windTravelDirection } from '../utils/compass';
 import { resolveConditionsAtTime } from '../utils/conditionsAtTime';
 import { assessEntryRoute, findBestEntryWindow } from '../utils/entryRoute';
 import { gameAreaBearingDeg } from '../utils/gameArea';
 
 function buildPanoramaHotspots(wind: WindReading, gameBearingDeg: number, isBad: boolean): PanoramaHotspotInput[] {
-  const goingDir = (wind.directionDeg + 180) % 360;
+  const goingDir = windTravelDirection(wind.directionDeg);
   return [
     { id: 'wind', bearingDeg: goingDir, colorHex: isBad ? palette.bad : palette.good, label: 'WIND' },
     { id: 'game', bearingDeg: gameBearingDeg, colorHex: palette.gameDir, label: 'GAME' },

@@ -1,5 +1,5 @@
 import type { EntryRouteAssessment, Stand, WindReading } from '../types';
-import { angularDiff, isWindUnfavorable } from './compass';
+import { angularDiff, isWindUnfavorable, windTravelDirection } from './compass';
 import { assessEntryRoute } from './entryRoute';
 import { gameAreaBearingDeg } from './gameArea';
 import { assessThermal } from './thermal';
@@ -8,7 +8,8 @@ export interface StandRanking {
   stand: Stand;
   score: number;
   windFavorable: boolean;
-  /** Angular distance between wind and the stand's facing — larger is safer. Used as a tie-breaker. */
+  /** Angular distance between the wind's actual travel direction and the game bearing —
+   * larger is safer (wind is carrying further away from the game area). Tie-breaker. */
   windMarginDeg: number;
   thermalFavorable: boolean | null;
   thermalLabel: string;
@@ -27,7 +28,7 @@ const ENTRY_WEIGHT = 1;
 export function rankStands(stands: Stand[], wind: WindReading, hour: number): StandRanking[] {
   const rankings = stands.map((stand): StandRanking => {
     const gameBearingDeg = gameAreaBearingDeg(stand);
-    const windMarginDeg = angularDiff(wind.directionDeg, gameBearingDeg);
+    const windMarginDeg = angularDiff(windTravelDirection(wind.directionDeg), gameBearingDeg);
     const windFavorable = !isWindUnfavorable(wind.directionDeg, gameBearingDeg);
     const thermal = assessThermal(hour, stand.gameAreaRelativeElevation);
 

@@ -2,7 +2,7 @@ import Svg, { Circle, G, Line, Polygon, Text as SvgText } from 'react-native-svg
 
 import { palette } from '../theme/palette';
 import { mono } from '../theme/typography';
-import { isWindUnfavorable } from '../utils/compass';
+import { isWindUnfavorable, windTravelDirection } from '../utils/compass';
 
 interface CompassDialProps {
   /** Direction the wind is blowing FROM, in degrees. */
@@ -30,7 +30,7 @@ export function CompassDial({ windDir, gameBearingDeg, size = 240 }: CompassDial
   };
 
   // windDir is where the wind is coming FROM; the cone shows where it's headed.
-  const goingDir = (windDir + 180) % 360;
+  const goingDir = windTravelDirection(windDir);
   const isBad = gameBearingDeg != null && isWindUnfavorable(windDir, gameBearingDeg);
   const coneColor = gameBearingDeg == null ? palette.amber : isBad ? palette.bad : palette.good;
 
