@@ -5,6 +5,7 @@ import { useVideoPlayer, VideoView } from 'expo-video';
 
 import { CompassDial } from '../components/CompassDial';
 import { DataSourceLabel } from '../components/DataSourceLabel';
+import { EntryRouteRisk } from '../components/EntryRouteRisk';
 import type { PanoramaHotspotInput } from '../components/PanoramaViewer';
 import { PanoramaViewer } from '../components/PanoramaViewer';
 import { ThermalIndicator } from '../components/ThermalIndicator';
@@ -16,6 +17,7 @@ import { mono } from '../theme/typography';
 import type { WeatherPoint, WindReading } from '../types';
 import { isWindUnfavorable, toCompass } from '../utils/compass';
 import { resolveConditionsAtTime } from '../utils/conditionsAtTime';
+import { assessEntryRoute, findBestEntryWindow } from '../utils/entryRoute';
 
 function buildPanoramaHotspots(wind: WindReading, standFacingDeg: number, isBad: boolean): PanoramaHotspotInput[] {
   const goingDir = (wind.directionDeg + 180) % 360;
@@ -96,6 +98,28 @@ export function StandDetailScreen({ standId, onBack }: StandDetailScreenProps) {
   const isBad = resolved.wind != null && isWindUnfavorable(resolved.wind.directionDeg, stand.facingDeg);
   const isActive = stand.id === activeStandId;
   const hasLocation = stand.latitude != null && stand.longitude != null;
+  const hasParking = stand.parkingLatitude != null && stand.parkingLongitude != null;
+
+  const entryAssessment =
+    hasLocation && hasParking && resolved.wind
+      ? assessEntryRoute({
+          stand: { latitude: stand.latitude!, longitude: stand.longitude! },
+          parking: { latitude: stand.parkingLatitude!, longitude: stand.parkingLongitude! },
+          standFacingDeg: stand.facingDeg,
+          wind: resolved.wind,
+        })
+      : null;
+
+  const bestEntryWindow =
+    hasLocation && hasParking && weatherSeries
+      ? findBestEntryWindow({
+          stand: { latitude: stand.latitude!, longitude: stand.longitude! },
+          parking: { latitude: stand.parkingLatitude!, longitude: stand.parkingLongitude! },
+          standFacingDeg: stand.facingDeg,
+          weatherSeries,
+          fromMs: nowMs,
+        })
+      : null;
 
   return (
     <View style={styles.container}>
@@ -179,6 +203,13 @@ export function StandDetailScreen({ standId, onBack }: StandDetailScreenProps) {
         )}
 
         <ThermalIndicator hour={hour} gameAreaRelativeElevation={stand.gameAreaRelativeElevation} />
+
+        <EntryRouteRisk
+          hasStandLocation={hasLocation}
+          hasParking={hasParking}
+          assessment={entryAssessment}
+          bestWindow={bestEntryWindow}
+        />
       </ScrollView>
 
       <View style={styles.sliderWrap}>

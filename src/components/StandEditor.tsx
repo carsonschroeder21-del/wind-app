@@ -48,6 +48,8 @@ export function StandEditor({ standId: standIdProp, onDone }: StandEditorProps) 
   const [facingDeg, setFacingDeg] = useState(existing?.facingDeg ?? activeStand?.facingDeg ?? 0);
   const [latitude, setLatitude] = useState<number | null>(existing?.latitude ?? null);
   const [longitude, setLongitude] = useState<number | null>(existing?.longitude ?? null);
+  const [parkingLatitude, setParkingLatitude] = useState<number | null>(existing?.parkingLatitude ?? null);
+  const [parkingLongitude, setParkingLongitude] = useState<number | null>(existing?.parkingLongitude ?? null);
   const [elevationFt, setElevationFt] = useState<number | null>(existing?.elevationFt ?? null);
   const [relativeElevation, setRelativeElevation] = useState<GameAreaRelativeElevation>(
     existing?.gameAreaRelativeElevation ?? 'level',
@@ -102,6 +104,11 @@ export function StandEditor({ standId: standIdProp, onDone }: StandEditorProps) 
     setElevationFt(ft);
   };
 
+  const handleParkingLocationChange = (coords: LatLng) => {
+    setParkingLatitude(coords.latitude);
+    setParkingLongitude(coords.longitude);
+  };
+
   const handleUseCurrentLocation = async () => {
     setLocating(true);
     setLocationError(null);
@@ -142,6 +149,8 @@ export function StandEditor({ standId: standIdProp, onDone }: StandEditorProps) 
       facingDeg,
       latitude,
       longitude,
+      parkingLatitude,
+      parkingLongitude,
       elevationFt,
       gameAreaRelativeElevation: relativeElevation,
       media,
@@ -292,6 +301,28 @@ export function StandEditor({ standId: standIdProp, onDone }: StandEditorProps) 
           </Pressable>
         )}
       </View>
+
+      <Text style={styles.sectionLabel}>PARKING / ENTRY POINT</Text>
+      {latitude != null && longitude != null ? (
+        <>
+          <StandMapPicker
+            latitude={parkingLatitude}
+            longitude={parkingLongitude}
+            onPick={handleParkingLocationChange}
+            height={200}
+            pinColor={palette.gameDir}
+            hint="Tap the map or drag the pin to mark where you park or start your walk-in"
+            secondary={{ latitude, longitude, color: palette.amber, label: 'Stand' }}
+          />
+          {parkingLatitude != null && parkingLongitude != null && (
+            <Text style={styles.coordsText}>
+              {parkingLatitude.toFixed(4)}, {parkingLongitude.toFixed(4)}
+            </Text>
+          )}
+        </>
+      ) : (
+        <Text style={styles.mediaHint}>Set the stand&apos;s own location above first — entry route risk is measured relative to it.</Text>
+      )}
 
       <Text style={styles.sectionLabel}>360° STAND VIEW</Text>
       {media ? (

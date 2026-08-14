@@ -11,25 +11,55 @@ import { palette } from '../theme/palette';
 const DEFAULT_REGION: Region = { latitude: 39.8283, longitude: -98.5795, latitudeDelta: 20, longitudeDelta: 20 };
 const PIN_ZOOM_DELTA = 0.01;
 
+interface SecondaryPin {
+  latitude: number;
+  longitude: number;
+  color: string;
+  label?: string;
+}
+
 interface StandMapPickerProps {
   latitude: number | null;
   longitude: number | null;
   onPick: (coords: LatLng) => void;
   height?: number;
+  pinColor?: string;
+  hint?: string;
+  /** An additional, non-draggable reference pin (e.g. showing the stand's own location
+   * while picking a parking spot) so the hunter can see both points relative to each
+   * other on one map instead of two disconnected widgets. */
+  secondary?: SecondaryPin | null;
 }
 
-export function StandMapPicker({ latitude, longitude, onPick, height = 200 }: StandMapPickerProps) {
+export function StandMapPicker({
+  latitude,
+  longitude,
+  onPick,
+  height = 200,
+  pinColor = palette.amber,
+  hint = "Tap the map or drag the pin to set your stand's location",
+  secondary = null,
+}: StandMapPickerProps) {
   const maps = loadMaps();
 
   // Computed once — MapView owns its own pan/zoom after that. Re-centering on every
   // coordinate change would yank the map out from under a hunter who just dragged it.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const initialRegion: Region = useMemo(
-    () => (latitude != null && longitude != null
-      ? { latitude, longitude, latitudeDelta: PIN_ZOOM_DELTA, longitudeDelta: PIN_ZOOM_DELTA }
-      : DEFAULT_REGION),
-    [],
-  );
+  const initialRegion: Region = useMemo(() => {
+    if (latitude != null && longitude != null) {
+      return { latitude, longitude, latitudeDelta: PIN_ZOOM_DELTA, longitudeDelta: PIN_ZOOM_DELTA };
+    }
+    if (secondary) {
+      return {
+        latitude: secondary.latitude,
+        longitude: secondary.longitude,
+        latitudeDelta: PIN_ZOOM_DELTA,
+        longitudeDelta: PIN_ZOOM_DELTA,
+      };
+    }
+    return DEFAULT_REGION;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   if (!maps) {
     return (
@@ -58,12 +88,19 @@ export function StandMapPicker({ latitude, longitude, onPick, height = 200 }: St
               coordinate={{ latitude, longitude }}
               draggable
               onDragEnd={(e: MarkerDragStartEndEvent) => onPick(e.nativeEvent.coordinate)}
-              pinColor={palette.amber}
+              pinColor={pinColor}
+            />
+          )}
+          {secondary && (
+            <Marker
+              coordinate={{ latitude: secondary.latitude, longitude: secondary.longitude }}
+              pinColor={secondary.color}
+              title={secondary.label}
             />
           )}
         </MapView>
       </View>
-      <Text style={styles.hint}>Tap the map or drag the pin to set your stand&apos;s location</Text>
+      <Text style={styles.hint}>{hint}</Text>
     </View>
   );
 }

@@ -37,6 +37,24 @@ export function StandRecommendation({ rankings, activeStandId, onSelect }: Stand
                     </Text>
                   </>
                 )}
+                {ranking.entryRisk && (
+                  <>
+                    <View
+                      style={[
+                        styles.dot,
+                        {
+                          backgroundColor:
+                            ranking.entryRisk.level === 'low'
+                              ? palette.good
+                              : ranking.entryRisk.level === 'moderate'
+                                ? palette.amber
+                                : palette.bad,
+                        },
+                      ]}
+                    />
+                    <Text style={styles.badgeText}>Entry {ranking.entryRisk.level} risk</Text>
+                  </>
+                )}
               </View>
             </View>
             {isActive ? (

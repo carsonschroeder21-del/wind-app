@@ -58,6 +58,8 @@ function createDefaultStand(): Stand {
     elevationFt: null,
     gameAreaRelativeElevation: 'level',
     media: null,
+    parkingLatitude: null,
+    parkingLongitude: null,
     createdAt: now,
     updatedAt: now,
   };

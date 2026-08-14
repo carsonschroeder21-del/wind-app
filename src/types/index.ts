@@ -71,8 +71,23 @@ export interface Stand {
   elevationFt: number | null;
   gameAreaRelativeElevation: GameAreaRelativeElevation;
   media: StandMedia | null;
+  /** Where the hunter parks / starts their walk-in, for the entry-route risk feature.
+   * Null until set — most hunts don't need this, so it's opt-in rather than required. */
+  parkingLatitude: number | null;
+  parkingLongitude: number | null;
   createdAt: number;
   updatedAt: number;
+}
+
+export type EntryRiskLevel = 'low' | 'moderate' | 'high';
+
+export interface EntryRouteAssessment {
+  level: EntryRiskLevel;
+  /** Fraction (0-1) of the walk-in that's exposed to scent carrying toward the game area. */
+  exposedFraction: number;
+  exposedFeet: number;
+  totalFeet: number;
+  label: string;
 }
 
 export type ThermalDirection = 'rising' | 'sinking' | 'transitioning';
