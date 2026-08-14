@@ -117,13 +117,25 @@ export interface WindHistoryEntry extends WindReading {
   source: WindSource;
 }
 
-/** A single hourly wind point from the weather API's forecast (which also serves recent
- * past hours via `past_days`), used for the historical-estimate and forecast portions of
- * the time slider. */
+/** A single hourly weather point from the weather API's forecast (which also serves
+ * recent past hours via `past_days`), used for the historical-estimate and forecast
+ * portions of the time slider, and for the barometric pressure trend tracker. */
 export interface WeatherPoint {
   timestampMs: number;
   directionDeg: number;
   speedMph: number;
+  pressureHpa: number;
+}
+
+export type PressureTrend = 'rising' | 'falling' | 'steady';
+
+export interface PressureAssessment {
+  trend: PressureTrend;
+  currentHpa: number;
+  /** Change over the lookback window, current minus past — negative means falling. */
+  changeHpa: number;
+  label: string;
+  detail: string;
 }
 
 /** What's actually feeding the conditions shown at the time slider's current position. */

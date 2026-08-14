@@ -102,6 +102,8 @@ src/
     CompassDial.tsx          Wind cone (wedge, narrow at center → wide in the travel
                              direction) + dashed line for the active stand's facing
     ThermalIndicator.tsx     Rising/sinking/unstable, driven by src/utils/thermal.ts
+    PressureIndicator.tsx    Rising/falling/steady barometric trend, driven by
+                             src/utils/pressure.ts
     StandEditor.tsx          Name, terrain/edge, facing slider (fallback), interactive
                              map (or GPS button) + elevation lookup, game-area pin,
                              game-area relative elevation
@@ -129,6 +131,9 @@ src/
                                     weather API call keyed on GPS position)
     location.ts               GPS capture via expo-location
     elevation.ts               Open-Meteo Elevation API lookup
+    weather/openMeteo.ts       fetchWeatherSeries() — hourly wind + barometric pressure,
+                               recent history through multi-day forecast, cached per
+                               rounded coordinate
     maps/
       availability.ts          Same Expo-Go/web detection pattern as the BLE factory
       loadMaps.ts               Guarded lazy require() of react-native-maps
@@ -138,6 +143,9 @@ src/
     thermal.ts                 Shared rising/sinking/transitioning + favorability logic,
                                used by the indicator, the recommendation engine, and
                                thermal logging
+    pressure.ts                 assessPressureTrend() — compares current vs. ~3h-ago
+                               pressure from the weather series to call rising/falling/
+                               steady; falling is framed as favorable (more deer movement)
     gameArea.ts                 Resolves the bearing/point to treat as "the game area" —
                                the real dropped pin when set, else the stand's facing
                                angle. Everything that used to read `stand.facingDeg`

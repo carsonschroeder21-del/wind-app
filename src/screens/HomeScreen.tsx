@@ -1,17 +1,20 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { CompassDial } from '../components/CompassDial';
+import { PressureIndicator } from '../components/PressureIndicator';
 import { StandRecommendation } from '../components/StandRecommendation';
 import { StatusBadge } from '../components/StatusBadge';
 import { ThermalIndicator } from '../components/ThermalIndicator';
 import { ThermalLogModal } from '../components/ThermalLogModal';
+import { fetchWeatherSeries } from '../services/weather/openMeteo';
 import { useAppStore } from '../state/store';
 import { palette } from '../theme/palette';
 import { mono } from '../theme/typography';
-import type { ThermalObservation } from '../types';
+import type { ThermalObservation, WeatherPoint } from '../types';
 import { isWindUnfavorable, toCompass } from '../utils/compass';
 import { gameAreaBearingDeg } from '../utils/gameArea';
+import { assessPressureTrend } from '../utils/pressure';
 import { rankStands } from '../utils/recommendation';
 import { assessThermal, getThermalDirection } from '../utils/thermal';
 import { formatRelativeTime } from '../utils/time';
@@ -27,11 +30,27 @@ export function HomeScreen() {
 
   const activeStand = stands.find((s) => s.id === activeStandId) ?? null;
   const [logModalVisible, setLogModalVisible] = useState(false);
+  const [weatherSeries, setWeatherSeries] = useState<WeatherPoint[] | null>(null);
+
+  useEffect(() => {
+    if (activeStand?.latitude == null || activeStand?.longitude == null) {
+      setWeatherSeries(null);
+      return;
+    }
+    let cancelled = false;
+    fetchWeatherSeries(activeStand.latitude, activeStand.longitude).then((points) => {
+      if (!cancelled) setWeatherSeries(points);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeStand?.latitude, activeStand?.longitude]);
 
   const hour = new Date().getHours();
   const gameBearingDeg = activeStand != null ? gameAreaBearingDeg(activeStand) : null;
   const isBad = gameBearingDeg != null && isWindUnfavorable(wind.directionDeg, gameBearingDeg);
   const thermal = assessThermal(hour, activeStand?.gameAreaRelativeElevation ?? 'level');
+  const pressure = assessPressureTrend(weatherSeries, Date.now());
   const rankings = rankStands(stands, wind, hour);
 
   const handleSubmitObservation = (observed: ThermalObservation) => {
@@ -85,6 +104,8 @@ export function HomeScreen() {
           </View>
 
           <ThermalIndicator hour={hour} gameAreaRelativeElevation={activeStand.gameAreaRelativeElevation} />
+
+          {pressure && <PressureIndicator assessment={pressure} />}
 
           <View style={styles.infoRow}>
             <View style={styles.infoCard}>

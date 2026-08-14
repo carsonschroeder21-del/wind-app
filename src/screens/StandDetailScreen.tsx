@@ -10,7 +10,7 @@ import type { PanoramaHotspotInput } from '../components/PanoramaViewer';
 import { PanoramaViewer } from '../components/PanoramaViewer';
 import { ThermalIndicator } from '../components/ThermalIndicator';
 import { TimeSlider } from '../components/TimeSlider';
-import { fetchWeatherWindSeries } from '../services/weather/openMeteo';
+import { fetchWeatherSeries } from '../services/weather/openMeteo';
 import { useAppStore } from '../state/store';
 import { palette } from '../theme/palette';
 import { mono } from '../theme/typography';
@@ -67,7 +67,7 @@ export function StandDetailScreen({ standId, onBack }: StandDetailScreenProps) {
       return;
     }
     let cancelled = false;
-    fetchWeatherWindSeries(stand.latitude, stand.longitude).then((points) => {
+    fetchWeatherSeries(stand.latitude, stand.longitude).then((points) => {
       if (!cancelled) setWeatherSeries(points);
     });
     return () => {

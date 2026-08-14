@@ -17,11 +17,12 @@ function cacheKey(latitude: number, longitude: number): string {
   return `${latitude.toFixed(2)},${longitude.toFixed(2)}`;
 }
 
-/** Fetches an hourly wind time series — recent past through multi-day forecast — from
- * Open-Meteo's free forecast API (https://open-meteo.com/en/docs), which also serves
- * `past_days` of recent history in the same call. No API key required, same provider
- * already used for elevation lookups. Returns null on failure. */
-export async function fetchWeatherWindSeries(latitude: number, longitude: number): Promise<WeatherPoint[] | null> {
+/** Fetches an hourly weather time series — wind + barometric pressure, recent past
+ * through multi-day forecast — from Open-Meteo's free forecast API
+ * (https://open-meteo.com/en/docs), which also serves `past_days` of recent history in
+ * the same call. No API key required, same provider already used for elevation lookups.
+ * Returns null on failure. */
+export async function fetchWeatherSeries(latitude: number, longitude: number): Promise<WeatherPoint[] | null> {
   const key = cacheKey(latitude, longitude);
   const cached = cache.get(key);
   if (cached && Date.now() - cached.fetchedAt < CACHE_TTL_MS) {
@@ -31,7 +32,7 @@ export async function fetchWeatherWindSeries(latitude: number, longitude: number
   try {
     const url =
       `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}` +
-      `&hourly=wind_speed_10m,wind_direction_10m&wind_speed_unit=mph` +
+      `&hourly=wind_speed_10m,wind_direction_10m,pressure_msl&wind_speed_unit=mph` +
       `&past_days=${PAST_DAYS}&forecast_days=${FORECAST_DAYS}&timezone=auto`;
     const response = await fetch(url);
     if (!response.ok) return cached?.points ?? null;
@@ -40,7 +41,10 @@ export async function fetchWeatherWindSeries(latitude: number, longitude: number
     const times: string[] | undefined = data?.hourly?.time;
     const speeds: number[] | undefined = data?.hourly?.wind_speed_10m;
     const directions: number[] | undefined = data?.hourly?.wind_direction_10m;
-    if (!times || !speeds || !directions) return cached?.points ?? null;
+    // Mean-sea-level pressure — comparable across stands at different elevations, unlike
+    // raw station pressure.
+    const pressures: number[] | undefined = data?.hourly?.pressure_msl;
+    if (!times || !speeds || !directions || !pressures) return cached?.points ?? null;
 
     const points: WeatherPoint[] = times.map((time, i) => ({
       // Open-Meteo returns local time (no offset) when timezone=auto — parsed as local,
@@ -48,12 +52,13 @@ export async function fetchWeatherWindSeries(latitude: number, longitude: number
       timestampMs: new Date(time).getTime(),
       speedMph: Math.round(speeds[i]),
       directionDeg: Math.round(directions[i]),
+      pressureHpa: Math.round(pressures[i] * 10) / 10,
     }));
 
     cache.set(key, { fetchedAt: Date.now(), points });
     return points;
   } catch (err) {
-    console.warn('[openMeteo] fetchWeatherWindSeries failed:', err);
+    console.warn('[openMeteo] fetchWeatherSeries failed:', err);
     return cached?.points ?? null;
   }
 }
