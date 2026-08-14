@@ -7,13 +7,24 @@ export type WindSource = 'live' | 'regional';
 
 export type AlertSensitivity = 0 | 1 | 2;
 
+export const SIGHTING_OUTCOMES = ['none', 'saw-game', 'harvest'] as const;
+export type SightingOutcome = (typeof SIGHTING_OUTCOMES)[number];
+
 export interface HuntLogEntry {
   id: string;
-  date: string;
-  time: string;
+  timestamp: number;
+  /** Null for hunts logged before per-stand tracking existed, or against a stand that's
+   * since been deleted — the cooldown tracker and recommendation engine simply skip
+   * these when counting hunts against a specific stand. */
+  standId: string | null;
+  /** Snapshot of the stand's name at log time (same denormalization ThermalLogEntry
+   * already uses), so the entry still reads sensibly if the stand is later renamed or
+   * deleted. Empty string when `standId` is null. */
+  standName: string;
   windLabel: string;
   terrain: Terrain;
   isEdge: boolean;
+  sighting: SightingOutcome;
   note: string;
 }
 
@@ -93,6 +104,15 @@ export interface EntryRouteAssessment {
   exposedFeet: number;
   totalFeet: number;
   label: string;
+}
+
+export interface StandCooldownStatus {
+  /** True once `huntsInWindow` reaches `threshold` — overhunting a spot pressures deer
+   * into avoiding it, so a flagged stand should rest before it's hunted again. */
+  flagged: boolean;
+  huntsInWindow: number;
+  windowDays: number;
+  threshold: number;
 }
 
 export type ThermalDirection = 'rising' | 'sinking' | 'transitioning';

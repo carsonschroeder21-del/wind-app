@@ -15,32 +15,42 @@ import type {
 } from '../types';
 import { genId } from '../utils/id';
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+// Predate per-stand tracking (standId: null) — illustrative history only, not counted
+// against any stand's cooldown.
 const SEED_LOG: HuntLogEntry[] = [
   {
     id: 'seed-1',
-    date: 'Aug 2',
-    time: '6:14 AM',
+    timestamp: Date.now() - 12 * DAY_MS,
+    standId: null,
+    standName: '',
     windLabel: '4 mph NW',
     terrain: 'Timber',
     isEdge: true,
+    sighting: 'saw-game',
     note: 'Good — steady, favorable',
   },
   {
     id: 'seed-2',
-    date: 'Aug 1',
-    time: '5:50 PM',
+    timestamp: Date.now() - 13 * DAY_MS,
+    standId: null,
+    standName: '',
     windLabel: '9 mph SE',
     terrain: 'Field',
     isEdge: false,
+    sighting: 'none',
     note: 'Shifted bad at 6:30',
   },
   {
     id: 'seed-3',
-    date: 'Jul 29',
-    time: '6:02 AM',
+    timestamp: Date.now() - 16 * DAY_MS,
+    standId: null,
+    standName: '',
     windLabel: '2 mph N',
     terrain: 'Water',
     isEdge: false,
+    sighting: 'none',
     note: 'Calm, favorable all sit',
   },
 ];
@@ -89,6 +99,13 @@ interface AppState {
   setSensitivity: (level: AlertSensitivity) => void;
   quietHoursOn: boolean;
   setQuietHoursOn: (on: boolean) => void;
+
+  // Stand cooldown tracker: how many days the rolling "hunted N times" window covers,
+  // and how many hunts within it trip the "resting recommended" flag.
+  cooldownWindowDays: number;
+  setCooldownWindowDays: (days: number) => void;
+  cooldownThreshold: number;
+  setCooldownThreshold: (count: number) => void;
 
   bracelet: BraceletStatus;
   setBraceletStatus: (status: BraceletStatus) => void;
@@ -149,6 +166,11 @@ export const useAppStore = create<AppState>()(
       quietHoursOn: false,
       setQuietHoursOn: (quietHoursOn) => set({ quietHoursOn }),
 
+      cooldownWindowDays: 7,
+      setCooldownWindowDays: (cooldownWindowDays) => set({ cooldownWindowDays }),
+      cooldownThreshold: 3,
+      setCooldownThreshold: (cooldownThreshold) => set({ cooldownThreshold }),
+
       bracelet: { state: 'disconnected', deviceName: null, batteryPct: null, signal: null },
       setBraceletStatus: (bracelet) => set({ bracelet }),
       windSensor: { state: 'disconnected', deviceName: null },
@@ -184,6 +206,8 @@ export const useAppStore = create<AppState>()(
         buzzOn: state.buzzOn,
         sensitivity: state.sensitivity,
         quietHoursOn: state.quietHoursOn,
+        cooldownWindowDays: state.cooldownWindowDays,
+        cooldownThreshold: state.cooldownThreshold,
         huntLog: state.huntLog,
         thermalLogs: state.thermalLogs,
         windHistory: state.windHistory,

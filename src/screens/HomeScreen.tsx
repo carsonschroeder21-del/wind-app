@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { CompassDial } from '../components/CompassDial';
+import { HuntLogModal } from '../components/HuntLogModal';
 import { PressureIndicator } from '../components/PressureIndicator';
 import { StandRecommendation } from '../components/StandRecommendation';
 import { StatusBadge } from '../components/StatusBadge';
@@ -11,7 +12,7 @@ import { fetchWeatherSeries } from '../services/weather/openMeteo';
 import { useAppStore } from '../state/store';
 import { palette } from '../theme/palette';
 import { mono } from '../theme/typography';
-import type { ThermalObservation, WeatherPoint } from '../types';
+import type { SightingOutcome, ThermalObservation, WeatherPoint } from '../types';
 import { isWindUnfavorable, toCompass } from '../utils/compass';
 import { gameAreaBearingDeg } from '../utils/gameArea';
 import { assessPressureTrend } from '../utils/pressure';
@@ -26,10 +27,15 @@ export function HomeScreen() {
   const activeStandId = useAppStore((s) => s.activeStandId);
   const setActiveStandId = useAppStore((s) => s.setActiveStandId);
   const addThermalLogEntry = useAppStore((s) => s.addThermalLogEntry);
+  const addHuntLogEntry = useAppStore((s) => s.addHuntLogEntry);
+  const huntLog = useAppStore((s) => s.huntLog);
+  const cooldownWindowDays = useAppStore((s) => s.cooldownWindowDays);
+  const cooldownThreshold = useAppStore((s) => s.cooldownThreshold);
   const windSensorConnected = useAppStore((s) => s.windSensor.state === 'connected');
 
   const activeStand = stands.find((s) => s.id === activeStandId) ?? null;
   const [logModalVisible, setLogModalVisible] = useState(false);
+  const [huntLogModalVisible, setHuntLogModalVisible] = useState(false);
   const [weatherSeries, setWeatherSeries] = useState<WeatherPoint[] | null>(null);
 
   useEffect(() => {
@@ -51,7 +57,15 @@ export function HomeScreen() {
   const isBad = gameBearingDeg != null && isWindUnfavorable(wind.directionDeg, gameBearingDeg);
   const thermal = assessThermal(hour, activeStand?.gameAreaRelativeElevation ?? 'level');
   const pressure = assessPressureTrend(weatherSeries, Date.now());
-  const rankings = rankStands(stands, wind, hour);
+  const rankings = rankStands({
+    stands,
+    wind,
+    hour,
+    nowMs: Date.now(),
+    huntLog,
+    cooldownWindowDays,
+    cooldownThreshold,
+  });
 
   const handleSubmitObservation = (observed: ThermalObservation) => {
     if (activeStand) {
@@ -68,6 +82,23 @@ export function HomeScreen() {
       });
     }
     setLogModalVisible(false);
+  };
+
+  const handleSubmitHunt = ({ sighting, note }: { sighting: SightingOutcome; note: string }) => {
+    if (activeStand) {
+      addHuntLogEntry({
+        id: genId(),
+        timestamp: Date.now(),
+        standId: activeStand.id,
+        standName: activeStand.name,
+        windLabel: `${wind.speedMph} mph ${toCompass(wind.directionDeg)}`,
+        terrain: activeStand.terrain,
+        isEdge: activeStand.isEdge,
+        sighting,
+        note,
+      });
+    }
+    setHuntLogModalVisible(false);
   };
 
   return (
@@ -123,6 +154,10 @@ export function HomeScreen() {
           <Pressable onPress={() => setLogModalVisible(true)} style={styles.logButton}>
             <Text style={styles.logButtonText}>Log What You're Seeing</Text>
           </Pressable>
+
+          <Pressable onPress={() => setHuntLogModalVisible(true)} style={styles.logButton}>
+            <Text style={styles.logButtonText}>Log This Hunt</Text>
+          </Pressable>
         </>
       ) : (
         <View style={styles.emptyBanner}>
@@ -139,6 +174,15 @@ export function HomeScreen() {
         onClose={() => setLogModalVisible(false)}
         onSubmit={handleSubmitObservation}
       />
+
+      {activeStand && (
+        <HuntLogModal
+          visible={huntLogModalVisible}
+          standName={activeStand.name}
+          onClose={() => setHuntLogModalVisible(false)}
+          onSubmit={handleSubmitHunt}
+        />
+      )}
     </ScrollView>
   );
 }

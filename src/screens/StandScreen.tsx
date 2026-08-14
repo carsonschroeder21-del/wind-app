@@ -10,6 +10,7 @@ import { palette } from '../theme/palette';
 import { mono } from '../theme/typography';
 import type { Stand } from '../types';
 import { toCompass } from '../utils/compass';
+import { assessStandCooldown } from '../utils/cooldown';
 
 type StandView = 'list' | 'map';
 
@@ -17,6 +18,9 @@ export function StandScreen() {
   const stands = useAppStore((s) => s.stands);
   const activeStandId = useAppStore((s) => s.activeStandId);
   const deleteStand = useAppStore((s) => s.deleteStand);
+  const huntLog = useAppStore((s) => s.huntLog);
+  const cooldownWindowDays = useAppStore((s) => s.cooldownWindowDays);
+  const cooldownThreshold = useAppStore((s) => s.cooldownThreshold);
 
   const [editingStandId, setEditingStandId] = useState<string | null | 'new'>(null);
   const [detailStandId, setDetailStandId] = useState<string | null>(null);
@@ -70,6 +74,7 @@ export function StandScreen() {
           ListEmptyComponent={<Text style={styles.emptyText}>No stands saved yet — add one above.</Text>}
           renderItem={({ item }) => {
             const active = item.id === activeStandId;
+            const cooldown = assessStandCooldown(item.id, huntLog, Date.now(), cooldownWindowDays, cooldownThreshold);
             return (
               <Pressable
                 onPress={() => setDetailStandId(item.id)}
@@ -81,6 +86,11 @@ export function StandScreen() {
                     {active && (
                       <View style={styles.activeBadge}>
                         <Text style={styles.activeBadgeText}>ACTIVE</Text>
+                      </View>
+                    )}
+                    {cooldown.flagged && (
+                      <View style={styles.activeBadge}>
+                        <Text style={styles.activeBadgeText}>RESTING RECOMMENDED</Text>
                       </View>
                     )}
                   </View>

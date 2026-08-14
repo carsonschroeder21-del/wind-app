@@ -8,6 +8,7 @@ import { DataSourceLabel } from '../components/DataSourceLabel';
 import { EntryRouteRisk } from '../components/EntryRouteRisk';
 import type { PanoramaHotspotInput } from '../components/PanoramaViewer';
 import { PanoramaViewer } from '../components/PanoramaViewer';
+import { StandCooldownBanner } from '../components/StandCooldownBanner';
 import { ThermalIndicator } from '../components/ThermalIndicator';
 import { TimeSlider } from '../components/TimeSlider';
 import { fetchWeatherSeries } from '../services/weather/openMeteo';
@@ -16,6 +17,7 @@ import { palette } from '../theme/palette';
 import { mono } from '../theme/typography';
 import type { WeatherPoint, WindReading } from '../types';
 import { isWindUnfavorable, toCompass, windTravelDirection } from '../utils/compass';
+import { assessStandCooldown } from '../utils/cooldown';
 import { resolveConditionsAtTime } from '../utils/conditionsAtTime';
 import { assessEntryRoute, findBestEntryWindow } from '../utils/entryRoute';
 import { gameAreaBearingDeg } from '../utils/gameArea';
@@ -57,6 +59,9 @@ export function StandDetailScreen({ standId, onBack }: StandDetailScreenProps) {
   const liveWind = useAppStore((s) => s.wind);
   const windSensorConnected = useAppStore((s) => s.windSensor.state === 'connected');
   const windHistory = useAppStore((s) => s.windHistory);
+  const huntLog = useAppStore((s) => s.huntLog);
+  const cooldownWindowDays = useAppStore((s) => s.cooldownWindowDays);
+  const cooldownThreshold = useAppStore((s) => s.cooldownThreshold);
 
   const [offsetMinutes, setOffsetMinutes] = useState(0);
   const [weatherSeries, setWeatherSeries] = useState<WeatherPoint[] | null>(null);
@@ -97,6 +102,7 @@ export function StandDetailScreen({ standId, onBack }: StandDetailScreenProps) {
   });
 
   const gameBearingDeg = gameAreaBearingDeg(stand);
+  const cooldown = assessStandCooldown(stand.id, huntLog, nowMs, cooldownWindowDays, cooldownThreshold);
   const isBad = resolved.wind != null && isWindUnfavorable(resolved.wind.directionDeg, gameBearingDeg);
   const isActive = stand.id === activeStandId;
   const hasLocation = stand.latitude != null && stand.longitude != null;
@@ -209,6 +215,8 @@ export function StandDetailScreen({ standId, onBack }: StandDetailScreenProps) {
         )}
 
         <ThermalIndicator hour={hour} gameAreaRelativeElevation={stand.gameAreaRelativeElevation} />
+
+        {cooldown.flagged && <StandCooldownBanner cooldown={cooldown} />}
 
         <EntryRouteRisk
           hasStandLocation={hasLocation}

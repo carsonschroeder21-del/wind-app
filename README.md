@@ -114,6 +114,10 @@ src/
                              one-tap "switch active stand"
     ThermalLogModal.tsx      Rising/sinking/unsure prompt for predicted-vs-observed
                              logging
+    HuntLogModal.tsx          Sighting (none/saw-game/harvest) + note prompt, saved
+                             against the active stand — src/utils/cooldown.ts reads these
+    StandCooldownBanner.tsx   "Resting recommended" card for the stand detail screen, only
+                             rendered when the stand is flagged (see cooldown.ts)
     TopBar, BottomTabBar, ToggleRow/ToggleSwitch, StatusBadge
   state/store.ts             zustand store — wind reading, stands[] + activeStandId,
                              alert settings, device status, hunt log, thermal logs.
@@ -146,6 +150,12 @@ src/
     pressure.ts                 assessPressureTrend() — compares current vs. ~3h-ago
                                pressure from the weather series to call rising/falling/
                                steady; falling is framed as favorable (more deer movement)
+    cooldown.ts                 assessStandCooldown() — counts a stand's HuntLogEntry rows
+                               within a rolling window (Alerts screen: window days +
+                               threshold, default 7 days / 3 hunts) and flags it once the
+                               threshold's hit; feeds the stand list badge, the stand
+                               detail banner, and a score penalty in the recommendation
+                               engine
     gameArea.ts                 Resolves the bearing/point to treat as "the game area" —
                                the real dropped pin when set, else the stand's facing
                                angle. Everything that used to read `stand.facingDeg`
@@ -181,6 +191,16 @@ this field existed — a facing angle (`facingDeg`) treated as a bearing from th
 feature that reasons about "which way is the game" (bad wind alerts, the compass dial,
 stand recommendations, entry-route risk) goes through it rather than reading either field
 directly.
+
+### Hunt log notes
+
+`HuntLogEntry` carries a real `timestamp` plus `standId`/`standName` (the latter a
+snapshot, same denormalization `ThermalLogEntry` already used, so a renamed or deleted
+stand doesn't corrupt old rows) and a `sighting: 'none' | 'saw-game' | 'harvest'` outcome.
+Entries are created via the "Log This Hunt" button on the Home screen
+(`HuntLogModal.tsx`), always against the active stand — `standId` is only `null` for
+entries logged before per-stand tracking existed, which the cooldown tracker and
+recommendation engine simply skip when counting hunts against a specific stand.
 
 ## Connecting a real bracelet later
 

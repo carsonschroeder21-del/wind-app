@@ -55,6 +55,14 @@ export function StandRecommendation({ rankings, activeStandId, onSelect }: Stand
                     <Text style={styles.badgeText}>Entry {ranking.entryRisk.level} risk</Text>
                   </>
                 )}
+                {ranking.cooldown.flagged && (
+                  <>
+                    <View style={[styles.dot, { backgroundColor: palette.amber }]} />
+                    <Text style={styles.badgeText}>
+                      Resting recommended ({ranking.cooldown.huntsInWindow}× in {ranking.cooldown.windowDays}d)
+                    </Text>
+                  </>
+                )}
               </View>
             </View>
             {isActive ? (

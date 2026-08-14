@@ -55,16 +55,25 @@ function SegmentButton({ label, active, onPress }: { label: string; active: bool
   );
 }
 
+const SIGHTING_LABEL: Record<HuntLogEntry['sighting'], string> = {
+  none: 'Nothing',
+  'saw-game': 'Saw Game',
+  harvest: 'Harvest',
+};
+
 function HuntRow({ entry }: { entry: HuntLogEntry }) {
   return (
     <View style={styles.row}>
       <View style={styles.rowTop}>
-        <Text style={styles.dateText}>
-          {entry.date} · {entry.time}
-        </Text>
+        <Text style={styles.dateText}>{formatLogTimestamp(entry.timestamp)}</Text>
         <Text style={styles.windText}>{entry.windLabel}</Text>
       </View>
       <View style={styles.tagRow}>
+        {entry.standName && (
+          <View style={styles.tag}>
+            <Text style={styles.tagText}>{entry.standName.toUpperCase()}</Text>
+          </View>
+        )}
         <View style={styles.tag}>
           <Text style={styles.tagText}>{entry.terrain.toUpperCase()}</Text>
         </View>
@@ -73,8 +82,13 @@ function HuntRow({ entry }: { entry: HuntLogEntry }) {
             <Text style={[styles.tagText, styles.edgeTagText]}>EDGE</Text>
           </View>
         )}
+        {entry.sighting !== 'none' && (
+          <View style={[styles.tag, styles.sightingTag]}>
+            <Text style={[styles.tagText, styles.sightingTagText]}>{SIGHTING_LABEL[entry.sighting].toUpperCase()}</Text>
+          </View>
+        )}
       </View>
-      <Text style={styles.noteText}>{entry.note}</Text>
+      {entry.note ? <Text style={styles.noteText}>{entry.note}</Text> : null}
     </View>
   );
 }
@@ -152,5 +166,7 @@ const styles = StyleSheet.create({
   tagText: { color: palette.textLo, fontSize: 10, letterSpacing: 0.5 },
   edgeTag: { backgroundColor: 'rgba(209,131,47,0.15)', borderColor: palette.amber },
   edgeTagText: { color: palette.amber },
+  sightingTag: { backgroundColor: 'rgba(127,174,118,0.15)', borderColor: palette.good },
+  sightingTagText: { color: palette.good },
   noteText: { color: palette.textLo, fontSize: 12, marginTop: 4 },
 });
