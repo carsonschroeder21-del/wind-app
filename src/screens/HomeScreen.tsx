@@ -11,6 +11,7 @@ import { palette } from '../theme/palette';
 import { mono } from '../theme/typography';
 import type { ThermalObservation } from '../types';
 import { isWindUnfavorable, toCompass } from '../utils/compass';
+import { gameAreaBearingDeg } from '../utils/gameArea';
 import { rankStands } from '../utils/recommendation';
 import { assessThermal, getThermalDirection } from '../utils/thermal';
 import { formatRelativeTime } from '../utils/time';
@@ -28,7 +29,8 @@ export function HomeScreen() {
   const [logModalVisible, setLogModalVisible] = useState(false);
 
   const hour = new Date().getHours();
-  const isBad = activeStand != null && isWindUnfavorable(wind.directionDeg, activeStand.facingDeg);
+  const gameBearingDeg = activeStand != null ? gameAreaBearingDeg(activeStand) : null;
+  const isBad = gameBearingDeg != null && isWindUnfavorable(wind.directionDeg, gameBearingDeg);
   const thermal = assessThermal(hour, activeStand?.gameAreaRelativeElevation ?? 'level');
   const rankings = rankStands(stands, wind, hour);
 
@@ -54,7 +56,7 @@ export function HomeScreen() {
       <StatusBadge live={windSensorConnected} />
 
       <View style={styles.dialWrap}>
-        <CompassDial windDir={wind.directionDeg} standFacing={activeStand?.facingDeg ?? null} />
+        <CompassDial windDir={wind.directionDeg} gameBearingDeg={gameBearingDeg} />
         <View style={styles.mphWrap}>
           <Text style={styles.mphText}>
             {wind.speedMph} <Text style={styles.mphUnit}>mph</Text>

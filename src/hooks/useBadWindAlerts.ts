@@ -4,6 +4,7 @@ import { getBraceletService } from '../services/ble/factory';
 import { buzzPhone } from '../services/haptics';
 import { useAppStore } from '../state/store';
 import { angularDiff, isWindUnfavorable } from '../utils/compass';
+import { gameAreaBearingDeg } from '../utils/gameArea';
 import type { AlertSensitivity } from '../types';
 
 // How much the wind direction has to move before we re-alert on a wind that's still bad,
@@ -23,7 +24,8 @@ function isQuietHours(date: Date): boolean {
  * the Alerts screen's buzz/sensitivity/quiet-hours settings. Mounted once at the app root. */
 export function useBadWindAlerts() {
   const wind = useAppStore((s) => s.wind);
-  const standFacingDeg = useAppStore((s) => s.stands.find((stand) => stand.id === s.activeStandId)?.facingDeg ?? null);
+  const activeStand = useAppStore((s) => s.stands.find((stand) => stand.id === s.activeStandId) ?? null);
+  const gameBearingDeg = activeStand ? gameAreaBearingDeg(activeStand) : null;
   const buzzOn = useAppStore((s) => s.buzzOn);
   const sensitivity = useAppStore((s) => s.sensitivity);
   const quietHoursOn = useAppStore((s) => s.quietHoursOn);
@@ -33,9 +35,9 @@ export function useBadWindAlerts() {
   const lastAlertDirRef = useRef<number | null>(null);
 
   useEffect(() => {
-    if (standFacingDeg == null) return;
+    if (gameBearingDeg == null) return;
 
-    const isBad = isWindUnfavorable(wind.directionDeg, standFacingDeg);
+    const isBad = isWindUnfavorable(wind.directionDeg, gameBearingDeg);
 
     if (!isBad) {
       wasBadRef.current = false;
@@ -60,5 +62,5 @@ export function useBadWindAlerts() {
     if (braceletConnected) {
       getBraceletService().vibrate('alert');
     }
-  }, [wind, standFacingDeg, buzzOn, sensitivity, quietHoursOn, braceletConnected]);
+  }, [wind, gameBearingDeg, buzzOn, sensitivity, quietHoursOn, braceletConnected]);
 }

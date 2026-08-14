@@ -1,6 +1,7 @@
 import type { EntryRouteAssessment, Stand, WindReading } from '../types';
 import { angularDiff, isWindUnfavorable } from './compass';
 import { assessEntryRoute } from './entryRoute';
+import { gameAreaBearingDeg } from './gameArea';
 import { assessThermal } from './thermal';
 
 export interface StandRanking {
@@ -25,8 +26,9 @@ const ENTRY_WEIGHT = 1;
  * below a clean sit with clean access, all else equal. Highest score first. */
 export function rankStands(stands: Stand[], wind: WindReading, hour: number): StandRanking[] {
   const rankings = stands.map((stand): StandRanking => {
-    const windMarginDeg = angularDiff(wind.directionDeg, stand.facingDeg);
-    const windFavorable = !isWindUnfavorable(wind.directionDeg, stand.facingDeg);
+    const gameBearingDeg = gameAreaBearingDeg(stand);
+    const windMarginDeg = angularDiff(wind.directionDeg, gameBearingDeg);
+    const windFavorable = !isWindUnfavorable(wind.directionDeg, gameBearingDeg);
     const thermal = assessThermal(hour, stand.gameAreaRelativeElevation);
 
     let score = windFavorable ? WIND_WEIGHT : -WIND_WEIGHT;
@@ -39,6 +41,8 @@ export function rankStands(stands: Stand[], wind: WindReading, hour: number): St
         stand: { latitude: stand.latitude, longitude: stand.longitude },
         parking: { latitude: stand.parkingLatitude, longitude: stand.parkingLongitude },
         standFacingDeg: stand.facingDeg,
+        gameAreaLatitude: stand.gameAreaLatitude,
+        gameAreaLongitude: stand.gameAreaLongitude,
         wind,
       });
       if (entryRisk.level === 'high') score -= ENTRY_WEIGHT;

@@ -1,15 +1,9 @@
 import type { EntryRouteAssessment, WeatherPoint, WindReading } from '../types';
 import { isWindUnfavorable } from './compass';
 import type { GeoPoint } from './geo';
-import { bearingBetween, destinationPoint, distanceMetersBetween, lerpPoint, metersToFeet } from './geo';
+import { bearingBetween, distanceMetersBetween, lerpPoint, metersToFeet } from './geo';
+import { resolveGameAreaPoint } from './gameArea';
 
-// How far out to treat the expected game area as being, for the purpose of checking
-// exposure at points *along* the walk-in (not just at the stand itself). Far enough to
-// represent "out there" rather than right next to the stand, but not so far that bearing
-// to it stops varying across a realistic walk-in — an infinitely-distant reference point
-// would make every point on the path share the stand's own bearing, which would silently
-// collapse this into a single all-or-nothing check instead of a real per-segment one.
-const GAME_REFERENCE_DISTANCE_M = 400;
 const PATH_SAMPLES = 12;
 // A route counts as "high risk" once more than half of it is exposed — below that, some
 // exposure but not most of it reads as "moderate."
@@ -19,6 +13,10 @@ export interface EntryRouteInput {
   stand: GeoPoint;
   parking: GeoPoint;
   standFacingDeg: number;
+  /** Real dropped game-area pin, when the hunter has set one — falls back to
+   * `standFacingDeg` when either is null (including stands saved before pins existed). */
+  gameAreaLatitude: number | null;
+  gameAreaLongitude: number | null;
   wind: WindReading;
 }
 
@@ -32,8 +30,20 @@ function positionLabel(t: number): string {
  * stand, for a single wind reading. Samples points along that line and checks — using the
  * same angularDiff/cone-half-angle test the wind cone itself uses — whether the wind at
  * that moment would carry scent released at each point toward the expected game area. */
-export function assessEntryRoute({ stand, parking, standFacingDeg, wind }: EntryRouteInput): EntryRouteAssessment {
-  const gameArea = destinationPoint(stand, standFacingDeg, GAME_REFERENCE_DISTANCE_M);
+export function assessEntryRoute({
+  stand,
+  parking,
+  standFacingDeg,
+  gameAreaLatitude,
+  gameAreaLongitude,
+  wind,
+}: EntryRouteInput): EntryRouteAssessment {
+  const gameArea = resolveGameAreaPoint({
+    ...stand,
+    facingDeg: standFacingDeg,
+    gameAreaLatitude,
+    gameAreaLongitude,
+  });
   const totalMeters = distanceMetersBetween(parking, stand);
 
   let exposedCount = 0;
@@ -93,6 +103,8 @@ export interface BestEntryWindowInput {
   stand: GeoPoint;
   parking: GeoPoint;
   standFacingDeg: number;
+  gameAreaLatitude: number | null;
+  gameAreaLongitude: number | null;
   weatherSeries: WeatherPoint[];
   fromMs: number;
   horizonHours?: number;
@@ -111,6 +123,8 @@ export function findBestEntryWindow({
   stand,
   parking,
   standFacingDeg,
+  gameAreaLatitude,
+  gameAreaLongitude,
   weatherSeries,
   fromMs,
   horizonHours = 6,
@@ -126,6 +140,8 @@ export function findBestEntryWindow({
       stand,
       parking,
       standFacingDeg,
+      gameAreaLatitude,
+      gameAreaLongitude,
       wind: { directionDeg: point.directionDeg, speedMph: point.speedMph, updatedAt: point.timestampMs },
     });
     if (!best || assessment.exposedFraction < best.assessment.exposedFraction) {

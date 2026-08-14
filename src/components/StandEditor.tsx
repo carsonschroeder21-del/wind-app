@@ -48,6 +48,8 @@ export function StandEditor({ standId: standIdProp, onDone }: StandEditorProps) 
   const [facingDeg, setFacingDeg] = useState(existing?.facingDeg ?? activeStand?.facingDeg ?? 0);
   const [latitude, setLatitude] = useState<number | null>(existing?.latitude ?? null);
   const [longitude, setLongitude] = useState<number | null>(existing?.longitude ?? null);
+  const [gameAreaLatitude, setGameAreaLatitude] = useState<number | null>(existing?.gameAreaLatitude ?? null);
+  const [gameAreaLongitude, setGameAreaLongitude] = useState<number | null>(existing?.gameAreaLongitude ?? null);
   const [parkingLatitude, setParkingLatitude] = useState<number | null>(existing?.parkingLatitude ?? null);
   const [parkingLongitude, setParkingLongitude] = useState<number | null>(existing?.parkingLongitude ?? null);
   const [elevationFt, setElevationFt] = useState<number | null>(existing?.elevationFt ?? null);
@@ -104,6 +106,16 @@ export function StandEditor({ standId: standIdProp, onDone }: StandEditorProps) 
     setElevationFt(ft);
   };
 
+  const handleGameAreaLocationChange = (coords: LatLng) => {
+    setGameAreaLatitude(coords.latitude);
+    setGameAreaLongitude(coords.longitude);
+  };
+
+  const handleClearGameAreaPin = () => {
+    setGameAreaLatitude(null);
+    setGameAreaLongitude(null);
+  };
+
   const handleParkingLocationChange = (coords: LatLng) => {
     setParkingLatitude(coords.latitude);
     setParkingLongitude(coords.longitude);
@@ -149,6 +161,8 @@ export function StandEditor({ standId: standIdProp, onDone }: StandEditorProps) 
       facingDeg,
       latitude,
       longitude,
+      gameAreaLatitude,
+      gameAreaLongitude,
       parkingLatitude,
       parkingLongitude,
       elevationFt,
@@ -232,7 +246,7 @@ export function StandEditor({ standId: standIdProp, onDone }: StandEditorProps) 
         <ToggleSwitch checked={isEdge} onChange={setIsEdge} />
       </View>
 
-      <Text style={styles.sectionLabel}>FACING DIRECTION (where you expect game)</Text>
+      <Text style={styles.sectionLabel}>FACING DIRECTION (fallback until you drop a game-area pin below)</Text>
       <Slider
         style={styles.slider}
         minimumValue={0}
@@ -301,6 +315,33 @@ export function StandEditor({ standId: standIdProp, onDone }: StandEditorProps) 
           </Pressable>
         )}
       </View>
+
+      <Text style={styles.sectionLabel}>GAME AREA PIN</Text>
+      {latitude != null && longitude != null ? (
+        <>
+          <StandMapPicker
+            latitude={gameAreaLatitude}
+            longitude={gameAreaLongitude}
+            onPick={handleGameAreaLocationChange}
+            height={200}
+            pinColor={palette.gameDir}
+            hint="Tap the map or drag the pin to mark where you expect game — used for precise wind/entry-risk calculations instead of the facing direction above"
+            secondary={{ latitude, longitude, color: palette.amber, label: 'Stand' }}
+          />
+          {gameAreaLatitude != null && gameAreaLongitude != null && (
+            <View style={styles.elevationRow}>
+              <Text style={styles.coordsText}>
+                {gameAreaLatitude.toFixed(4)}, {gameAreaLongitude.toFixed(4)}
+              </Text>
+              <Pressable onPress={handleClearGameAreaPin} hitSlop={8}>
+                <Text style={styles.refreshText}>Clear pin</Text>
+              </Pressable>
+            </View>
+          )}
+        </>
+      ) : (
+        <Text style={styles.mediaHint}>Set the stand&apos;s own location above first — the game-area pin is measured relative to it.</Text>
+      )}
 
       <Text style={styles.sectionLabel}>PARKING / ENTRY POINT</Text>
       {latitude != null && longitude != null ? (

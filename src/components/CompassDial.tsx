@@ -7,16 +7,17 @@ import { isWindUnfavorable } from '../utils/compass';
 interface CompassDialProps {
   /** Direction the wind is blowing FROM, in degrees. */
   windDir: number;
-  /** Direction the hunter expects game to come from (the active stand's facing), in
-   * degrees. Pass null when there's no active stand to compare against. */
-  standFacing: number | null;
+  /** Bearing to where the hunter expects game — from the active stand's real dropped
+   * game-area pin when set, else its facing angle (see `gameAreaBearingDeg`). Pass null
+   * when there's no active stand to compare against. */
+  gameBearingDeg: number | null;
   size?: number;
 }
 
 const CARDINALS = ['N', 'E', 'S', 'W'];
 const CONE_HALF_ANGLE_DEG = 16;
 
-export function CompassDial({ windDir, standFacing, size = 240 }: CompassDialProps) {
+export function CompassDial({ windDir, gameBearingDeg, size = 240 }: CompassDialProps) {
   const cx = size / 2;
   const cy = size / 2;
   const r = size / 2 - 24;
@@ -30,14 +31,14 @@ export function CompassDial({ windDir, standFacing, size = 240 }: CompassDialPro
 
   // windDir is where the wind is coming FROM; the cone shows where it's headed.
   const goingDir = (windDir + 180) % 360;
-  const isBad = standFacing != null && isWindUnfavorable(windDir, standFacing);
-  const coneColor = standFacing == null ? palette.amber : isBad ? palette.bad : palette.good;
+  const isBad = gameBearingDeg != null && isWindUnfavorable(windDir, gameBearingDeg);
+  const coneColor = gameBearingDeg == null ? palette.amber : isBad ? palette.bad : palette.good;
 
   const [tipX, tipY] = toXY(goingDir, coneRadius);
   const [leftX, leftY] = toXY(goingDir - CONE_HALF_ANGLE_DEG, coneRadius);
   const [rightX, rightY] = toXY(goingDir + CONE_HALF_ANGLE_DEG, coneRadius);
 
-  const gameLineEnd = standFacing != null ? toXY(standFacing, gameLineRadius) : null;
+  const gameLineEnd = gameBearingDeg != null ? toXY(gameBearingDeg, gameLineRadius) : null;
 
   return (
     <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>

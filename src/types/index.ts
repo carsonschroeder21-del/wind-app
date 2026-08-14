@@ -71,6 +71,11 @@ export interface Stand {
   elevationFt: number | null;
   gameAreaRelativeElevation: GameAreaRelativeElevation;
   media: StandMedia | null;
+  /** Real pin marking where the hunter expects game, dropped on the map for precise
+   * distance/bearing calculations. Null until dropped — stands fall back to `facingDeg`
+   * as a rough bearing until then, including stands saved before this field existed. */
+  gameAreaLatitude: number | null;
+  gameAreaLongitude: number | null;
   /** Where the hunter parks / starts their walk-in, for the entry-route risk feature.
    * Null until set — most hunts don't need this, so it's opt-in rather than required. */
   parkingLatitude: number | null;

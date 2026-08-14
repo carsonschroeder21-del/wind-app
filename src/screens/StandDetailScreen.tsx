@@ -18,12 +18,13 @@ import type { WeatherPoint, WindReading } from '../types';
 import { isWindUnfavorable, toCompass } from '../utils/compass';
 import { resolveConditionsAtTime } from '../utils/conditionsAtTime';
 import { assessEntryRoute, findBestEntryWindow } from '../utils/entryRoute';
+import { gameAreaBearingDeg } from '../utils/gameArea';
 
-function buildPanoramaHotspots(wind: WindReading, standFacingDeg: number, isBad: boolean): PanoramaHotspotInput[] {
+function buildPanoramaHotspots(wind: WindReading, gameBearingDeg: number, isBad: boolean): PanoramaHotspotInput[] {
   const goingDir = (wind.directionDeg + 180) % 360;
   return [
     { id: 'wind', bearingDeg: goingDir, colorHex: isBad ? palette.bad : palette.good, label: 'WIND' },
-    { id: 'game', bearingDeg: standFacingDeg, colorHex: palette.gameDir, label: 'GAME' },
+    { id: 'game', bearingDeg: gameBearingDeg, colorHex: palette.gameDir, label: 'GAME' },
   ];
 }
 
@@ -95,7 +96,8 @@ export function StandDetailScreen({ standId, onBack }: StandDetailScreenProps) {
     weatherSeries,
   });
 
-  const isBad = resolved.wind != null && isWindUnfavorable(resolved.wind.directionDeg, stand.facingDeg);
+  const gameBearingDeg = gameAreaBearingDeg(stand);
+  const isBad = resolved.wind != null && isWindUnfavorable(resolved.wind.directionDeg, gameBearingDeg);
   const isActive = stand.id === activeStandId;
   const hasLocation = stand.latitude != null && stand.longitude != null;
   const hasParking = stand.parkingLatitude != null && stand.parkingLongitude != null;
@@ -106,6 +108,8 @@ export function StandDetailScreen({ standId, onBack }: StandDetailScreenProps) {
           stand: { latitude: stand.latitude!, longitude: stand.longitude! },
           parking: { latitude: stand.parkingLatitude!, longitude: stand.parkingLongitude! },
           standFacingDeg: stand.facingDeg,
+          gameAreaLatitude: stand.gameAreaLatitude,
+          gameAreaLongitude: stand.gameAreaLongitude,
           wind: resolved.wind,
         })
       : null;
@@ -116,6 +120,8 @@ export function StandDetailScreen({ standId, onBack }: StandDetailScreenProps) {
           stand: { latitude: stand.latitude!, longitude: stand.longitude! },
           parking: { latitude: stand.parkingLatitude!, longitude: stand.parkingLongitude! },
           standFacingDeg: stand.facingDeg,
+          gameAreaLatitude: stand.gameAreaLatitude,
+          gameAreaLongitude: stand.gameAreaLongitude,
           weatherSeries,
           fromMs: nowMs,
         })
@@ -146,7 +152,7 @@ export function StandDetailScreen({ standId, onBack }: StandDetailScreenProps) {
               <PanoramaViewer
                 uri={stand.media.uri}
                 northOffsetDeg={stand.media.northOffsetDeg}
-                hotspots={buildPanoramaHotspots(resolved.wind, stand.facingDeg, isBad)}
+                hotspots={buildPanoramaHotspots(resolved.wind, gameBearingDeg, isBad)}
                 onCalibrated={(northOffsetDeg) =>
                   updateStand(stand.id, { media: { ...stand.media!, northOffsetDeg } })
                 }
@@ -156,7 +162,7 @@ export function StandDetailScreen({ standId, onBack }: StandDetailScreenProps) {
               <VideoPreview uri={stand.media.uri} />
             ) : (
               <View style={styles.dialWrap}>
-                <CompassDial windDir={resolved.wind.directionDeg} standFacing={stand.facingDeg} size={220} />
+                <CompassDial windDir={resolved.wind.directionDeg} gameBearingDeg={gameBearingDeg} size={220} />
               </View>
             )}
             {stand.media?.type === 'photo360' && stand.media.northOffsetDeg != null && (

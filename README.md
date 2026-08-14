@@ -102,8 +102,9 @@ src/
     CompassDial.tsx          Wind cone (wedge, narrow at center → wide in the travel
                              direction) + dashed line for the active stand's facing
     ThermalIndicator.tsx     Rising/sinking/unstable, driven by src/utils/thermal.ts
-    StandEditor.tsx          Name, terrain/edge, facing slider, interactive map (or GPS
-                             button) + elevation lookup, game-area relative elevation
+    StandEditor.tsx          Name, terrain/edge, facing slider (fallback), interactive
+                             map (or GPS button) + elevation lookup, game-area pin,
+                             game-area relative elevation
     StandMapPicker.tsx       Single-pin Google Map for the editor — tap/drag to set a
                              stand's coordinates
     AllStandsMap.tsx         Every saved stand as a pin, tap one to open its editor
@@ -137,6 +138,11 @@ src/
     thermal.ts                 Shared rising/sinking/transitioning + favorability logic,
                                used by the indicator, the recommendation engine, and
                                thermal logging
+    gameArea.ts                 Resolves the bearing/point to treat as "the game area" —
+                               the real dropped pin when set, else the stand's facing
+                               angle. Everything that used to read `stand.facingDeg`
+                               directly (bad wind alerts, the compass dial, stand
+                               recommendations, entry-route risk) goes through this now
     recommendation.ts          Scores each saved stand against current wind + thermal
                                conditions
   hooks/
@@ -159,6 +165,14 @@ and it's what the thermal favorability logic and the recommendation engine key o
 The stand's own elevation (from Open-Meteo) is captured separately and shown for
 reference, refreshed automatically any time the pin moves — by tap, drag, or the "Use
 Current Location" GPS button.
+
+Where the hunter expects game can be a real dropped pin (`gameAreaLatitude` /
+`gameAreaLongitude`) or, for stands with no pin yet — including every stand saved before
+this field existed — a facing angle (`facingDeg`) treated as a bearing from the stand.
+`src/utils/gameArea.ts` is the single place that resolves which one applies; every
+feature that reasons about "which way is the game" (bad wind alerts, the compass dial,
+stand recommendations, entry-route risk) goes through it rather than reading either field
+directly.
 
 ## Connecting a real bracelet later
 
