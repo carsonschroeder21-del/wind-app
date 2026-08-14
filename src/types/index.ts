@@ -44,6 +44,21 @@ export interface WindReading {
 export const GAME_AREA_RELATIVE_ELEVATIONS = ['above', 'level', 'below'] as const;
 export type GameAreaRelativeElevation = (typeof GAME_AREA_RELATIVE_ELEVATIONS)[number];
 
+export type StandMediaType = 'photo360' | 'video360';
+
+export interface StandMedia {
+  type: StandMediaType;
+  /** Local file:// URI of the persisted copy (copied out of the picker's cache location
+   * so it survives independently of the OS's temp-file cleanup). */
+  uri: string;
+  /** Yaw offset (degrees) that aligns the panorama's own coordinate space with true
+   * north, set via the in-viewer calibration step. Null until calibrated — photo360
+   * media can't be shown with direction markers until then. Not applicable to video360
+   * (rendered as a flat preview, not panoramically, so there's nothing to calibrate). */
+  northOffsetDeg: number | null;
+  createdAt: number;
+}
+
 export interface Stand {
   id: string;
   name: string;
@@ -55,6 +70,7 @@ export interface Stand {
   longitude: number | null;
   elevationFt: number | null;
   gameAreaRelativeElevation: GameAreaRelativeElevation;
+  media: StandMedia | null;
   createdAt: number;
   updatedAt: number;
 }

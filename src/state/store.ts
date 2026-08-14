@@ -57,6 +57,7 @@ function createDefaultStand(): Stand {
     longitude: null,
     elevationFt: null,
     gameAreaRelativeElevation: 'level',
+    media: null,
     createdAt: now,
     updatedAt: now,
   };
@@ -70,7 +71,10 @@ interface AppState {
 
   stands: Stand[];
   activeStandId: string | null;
-  addStand: (input: Omit<Stand, 'id' | 'createdAt' | 'updatedAt'>) => string;
+  // `id` is normally left for addStand to generate, but callers that need to know the
+  // id before the stand exists in the store (e.g. to namespace uploaded media files
+  // under it while the editor is still open) can supply one up front.
+  addStand: (input: Omit<Stand, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }) => string;
   updateStand: (id: string, patch: Partial<Omit<Stand, 'id' | 'createdAt' | 'updatedAt'>>) => void;
   deleteStand: (id: string) => void;
   setActiveStandId: (id: string) => void;
@@ -114,7 +118,8 @@ export const useAppStore = create<AppState>()(
 
       addStand: (input) => {
         const now = Date.now();
-        const stand: Stand = { ...input, id: genId(), createdAt: now, updatedAt: now };
+        const { id, ...rest } = input;
+        const stand: Stand = { ...rest, id: id ?? genId(), createdAt: now, updatedAt: now };
         set((s) => ({ stands: [...s.stands, stand] }));
         return stand.id;
       },

@@ -57,6 +57,13 @@ module.exports = {
           androidGoogleMapsApiKey: googleMapsApiKey,
         },
       ],
+      [
+        'expo-image-picker',
+        {
+          photosPermission: 'Wind Scout uses your photo library to add a 360° view of your stand.',
+          microphonePermission: false,
+        },
+      ],
     ],
     owner: 'carson6647',
     extra: {

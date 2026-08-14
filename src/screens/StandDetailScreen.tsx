@@ -1,18 +1,42 @@
 import { Check, ChevronLeft } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useVideoPlayer, VideoView } from 'expo-video';
 
 import { CompassDial } from '../components/CompassDial';
 import { DataSourceLabel } from '../components/DataSourceLabel';
+import type { PanoramaHotspotInput } from '../components/PanoramaViewer';
+import { PanoramaViewer } from '../components/PanoramaViewer';
 import { ThermalIndicator } from '../components/ThermalIndicator';
 import { TimeSlider } from '../components/TimeSlider';
 import { fetchWeatherWindSeries } from '../services/weather/openMeteo';
 import { useAppStore } from '../state/store';
 import { palette } from '../theme/palette';
 import { mono } from '../theme/typography';
-import type { WeatherPoint } from '../types';
+import type { WeatherPoint, WindReading } from '../types';
 import { isWindUnfavorable, toCompass } from '../utils/compass';
 import { resolveConditionsAtTime } from '../utils/conditionsAtTime';
+
+function buildPanoramaHotspots(wind: WindReading, standFacingDeg: number, isBad: boolean): PanoramaHotspotInput[] {
+  const goingDir = (wind.directionDeg + 180) % 360;
+  return [
+    { id: 'wind', bearingDeg: goingDir, colorHex: isBad ? palette.bad : palette.good, label: 'WIND' },
+    { id: 'game', bearingDeg: standFacingDeg, colorHex: palette.gameDir, label: 'GAME' },
+  ];
+}
+
+function VideoPreview({ uri }: { uri: string }) {
+  const player = useVideoPlayer(uri, (p) => {
+    p.loop = true;
+    p.play();
+  });
+  return (
+    <View style={styles.videoWrap}>
+      <VideoView player={player} style={styles.video} contentFit="cover" nativeControls={false} />
+      <Text style={styles.videoHint}>360° video shown as a flat preview — full look-around playback isn't supported yet.</Text>
+    </View>
+  );
+}
 
 const MIN_OFFSET_MINUTES = -24 * 60;
 const MAX_OFFSET_MINUTES = 48 * 60;
@@ -26,6 +50,7 @@ export function StandDetailScreen({ standId, onBack }: StandDetailScreenProps) {
   const stand = useAppStore((s) => s.stands.find((st) => st.id === standId) ?? null);
   const activeStandId = useAppStore((s) => s.activeStandId);
   const setActiveStandId = useAppStore((s) => s.setActiveStandId);
+  const updateStand = useAppStore((s) => s.updateStand);
   const liveWind = useAppStore((s) => s.wind);
   const windSensorConnected = useAppStore((s) => s.windSensor.state === 'connected');
   const windHistory = useAppStore((s) => s.windHistory);
@@ -93,14 +118,37 @@ export function StandDetailScreen({ standId, onBack }: StandDetailScreenProps) {
 
         {resolved.wind ? (
           <>
-            <View style={styles.dialWrap}>
-              <CompassDial windDir={resolved.wind.directionDeg} standFacing={stand.facingDeg} size={220} />
-              <View style={styles.mphWrap}>
-                <Text style={styles.mphText}>
-                  {resolved.wind.speedMph} <Text style={styles.mphUnit}>mph</Text>
-                </Text>
-                <Text style={styles.fromText}>WIND FROM {toCompass(resolved.wind.directionDeg)}</Text>
+            {stand.media?.type === 'photo360' ? (
+              <PanoramaViewer
+                uri={stand.media.uri}
+                northOffsetDeg={stand.media.northOffsetDeg}
+                hotspots={buildPanoramaHotspots(resolved.wind, stand.facingDeg, isBad)}
+                onCalibrated={(northOffsetDeg) =>
+                  updateStand(stand.id, { media: { ...stand.media!, northOffsetDeg } })
+                }
+                height={280}
+              />
+            ) : stand.media?.type === 'video360' ? (
+              <VideoPreview uri={stand.media.uri} />
+            ) : (
+              <View style={styles.dialWrap}>
+                <CompassDial windDir={resolved.wind.directionDeg} standFacing={stand.facingDeg} size={220} />
               </View>
+            )}
+            {stand.media?.type === 'photo360' && stand.media.northOffsetDeg != null && (
+              <Pressable
+                onPress={() => updateStand(stand.id, { media: { ...stand.media!, northOffsetDeg: null } })}
+                hitSlop={8}
+                style={styles.recalibrateButton}
+              >
+                <Text style={styles.recalibrateText}>Recalibrate North</Text>
+              </Pressable>
+            )}
+            <View style={styles.mphWrap}>
+              <Text style={styles.mphText}>
+                {resolved.wind.speedMph} <Text style={styles.mphUnit}>mph</Text>
+              </Text>
+              <Text style={styles.fromText}>WIND FROM {toCompass(resolved.wind.directionDeg)}</Text>
             </View>
 
             <View
@@ -164,6 +212,11 @@ const styles = StyleSheet.create({
   scroll: { alignItems: 'center', paddingBottom: 16 },
   standName: { color: palette.textHi, fontSize: 18, fontWeight: '600', marginBottom: 12 },
   dialWrap: { alignItems: 'center' },
+  videoWrap: { width: '100%' },
+  video: { width: '100%', height: 220, borderRadius: 8, backgroundColor: palette.bgAlt },
+  videoHint: { color: palette.textLo, fontSize: 10, marginTop: 6, textAlign: 'center', lineHeight: 14 },
+  recalibrateButton: { marginTop: 8, alignSelf: 'center' },
+  recalibrateText: { color: palette.amber, fontSize: 11, letterSpacing: 0.5 },
   mphWrap: { marginTop: 12, alignItems: 'center' },
   mphText: { color: palette.textHi, fontSize: 30, fontFamily: mono, fontWeight: '700' },
   mphUnit: { fontSize: 14, color: palette.textLo, fontWeight: '400' },

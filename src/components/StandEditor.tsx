@@ -1,17 +1,19 @@
 import Slider from '@react-native-community/slider';
-import { Check, LocateFixed, Trash2 } from 'lucide-react-native';
+import { Camera, Check, LocateFixed, Trash2 } from 'lucide-react-native';
 import { useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import type { LatLng } from 'react-native-maps';
 
 import { fetchElevationFt } from '../services/elevation';
 import { getCurrentLocation } from '../services/location';
+import { deleteStandMediaFile, pickStandMedia } from '../services/media/standMedia';
 import { useAppStore } from '../state/store';
 import { palette } from '../theme/palette';
 import { mono } from '../theme/typography';
 import { GAME_AREA_RELATIVE_ELEVATIONS, TERRAIN_TYPES } from '../types';
-import type { GameAreaRelativeElevation, Stand, Terrain } from '../types';
+import type { GameAreaRelativeElevation, Stand, StandMedia, Terrain } from '../types';
 import { toCompass } from '../utils/compass';
+import { genId } from '../utils/id';
 import { StandMapPicker } from './StandMapPicker';
 import { ToggleSwitch } from './ToggleSwitch';
 
@@ -27,12 +29,18 @@ interface StandEditorProps {
   onDone: () => void;
 }
 
-export function StandEditor({ standId, onDone }: StandEditorProps) {
-  const existing = useAppStore((s) => s.stands.find((st) => st.id === standId) ?? null);
+export function StandEditor({ standId: standIdProp, onDone }: StandEditorProps) {
+  const existing = useAppStore((s) => s.stands.find((st) => st.id === standIdProp) ?? null);
   const activeStand = useAppStore((s) => s.stands.find((st) => st.id === s.activeStandId) ?? null);
   const addStand = useAppStore((s) => s.addStand);
   const updateStand = useAppStore((s) => s.updateStand);
   const deleteStand = useAppStore((s) => s.deleteStand);
+
+  // A new stand has no id until it's saved, but the media picker needs one to namespace
+  // the uploaded file's storage directory — so a new stand gets its id up front instead
+  // of waiting for addStand to generate one.
+  const [pendingNewId] = useState(() => genId());
+  const standId = existing?.id ?? pendingNewId;
 
   const [name, setName] = useState(existing?.name ?? '');
   const [terrain, setTerrain] = useState<Terrain>(existing?.terrain ?? 'Timber');
@@ -44,11 +52,42 @@ export function StandEditor({ standId, onDone }: StandEditorProps) {
   const [relativeElevation, setRelativeElevation] = useState<GameAreaRelativeElevation>(
     existing?.gameAreaRelativeElevation ?? 'level',
   );
+  const [media, setMedia] = useState<StandMedia | null>(existing?.media ?? null);
 
   const [locating, setLocating] = useState(false);
   const [elevationLoading, setElevationLoading] = useState(false);
+  const [mediaLoading, setMediaLoading] = useState(false);
   const [locationError, setLocationError] = useState<string | null>(null);
+  const [mediaError, setMediaError] = useState<string | null>(null);
   const [nameError, setNameError] = useState(false);
+
+  const handlePickMedia = async () => {
+    setMediaError(null);
+    setMediaLoading(true);
+    const result = await pickStandMedia(standId);
+    setMediaLoading(false);
+
+    if (!result.ok) {
+      if (result.reason === 'permission-denied') {
+        setMediaError('Photo library permission denied — enable it in Settings to add a 360° view.');
+      } else if (result.reason === 'failed') {
+        setMediaError("Couldn't add that file. Try again.");
+      }
+      return;
+    }
+
+    // Only clean up a *new, unsaved* pick made earlier in this same session — the
+    // originally-saved file (if any) stays on disk untouched until Save actually commits
+    // away from it, so Cancel can still back out cleanly.
+    if (media && media !== existing?.media) deleteStandMediaFile(media);
+    setMedia(result.media);
+  };
+
+  const handleRemoveMedia = () => {
+    if (!media) return;
+    if (media !== existing?.media) deleteStandMediaFile(media);
+    setMedia(null);
+  };
 
   /** Single funnel for every way a coordinate can be set — map tap, marker drag, or the
    * GPS button — so elevation lookup always follows consistently. */
@@ -105,13 +144,24 @@ export function StandEditor({ standId, onDone }: StandEditorProps) {
       longitude,
       elevationFt,
       gameAreaRelativeElevation: relativeElevation,
+      media,
     };
+
+    // Only now — committing the save — is it safe to delete the file this replaced.
+    if (existing?.media && existing.media !== media) deleteStandMediaFile(existing.media);
 
     if (existing) {
       updateStand(existing.id, payload);
     } else {
-      addStand(payload);
+      addStand({ ...payload, id: pendingNewId });
     }
+    onDone();
+  };
+
+  const handleCancel = () => {
+    // Discard a newly-picked file that was never saved — the original (if any) was left
+    // untouched on disk this whole time, so there's nothing to restore.
+    if (media && media !== existing?.media) deleteStandMediaFile(media);
     onDone();
   };
 
@@ -123,6 +173,7 @@ export function StandEditor({ standId, onDone }: StandEditorProps) {
         text: 'Delete',
         style: 'destructive',
         onPress: () => {
+          if (existing.media) deleteStandMediaFile(existing.media);
           deleteStand(existing.id);
           onDone();
         },
@@ -242,12 +293,45 @@ export function StandEditor({ standId, onDone }: StandEditorProps) {
         )}
       </View>
 
+      <Text style={styles.sectionLabel}>360° STAND VIEW</Text>
+      {media ? (
+        <View style={styles.mediaRow}>
+          <Text style={styles.mediaText}>
+            {media.type === 'photo360' ? '360° photo added' : '360° video added'}
+            {media.type === 'photo360' && media.northOffsetDeg == null ? ' — not calibrated yet' : ''}
+          </Text>
+          <View style={styles.mediaActions}>
+            <Pressable onPress={handlePickMedia} disabled={mediaLoading} hitSlop={8}>
+              <Text style={styles.refreshText}>Replace</Text>
+            </Pressable>
+            <Pressable onPress={handleRemoveMedia} hitSlop={8}>
+              <Text style={[styles.refreshText, { color: palette.bad }]}>Remove</Text>
+            </Pressable>
+          </View>
+        </View>
+      ) : (
+        <Pressable onPress={handlePickMedia} disabled={mediaLoading} style={styles.locationButton}>
+          {mediaLoading ? (
+            <ActivityIndicator size="small" color={palette.onAmber} />
+          ) : (
+            <>
+              <Camera size={14} color={palette.onAmber} />
+              <Text style={styles.locationButtonText}>Add 360° Photo or Video</Text>
+            </>
+          )}
+        </Pressable>
+      )}
+      {mediaError && <Text style={styles.errorText}>{mediaError}</Text>}
+      {media?.type === 'photo360' && media.northOffsetDeg == null && (
+        <Text style={styles.mediaHint}>Calibrate it from the stand detail screen next — you'll rotate the view to face North once.</Text>
+      )}
+
       <Pressable onPress={handleSave} style={styles.saveButton}>
         <Check size={14} color={palette.onAmber} />
         <Text style={styles.saveButtonText}>{existing ? 'Save Changes' : 'Save Stand'}</Text>
       </Pressable>
 
-      <Pressable onPress={onDone} style={styles.cancelButton}>
+      <Pressable onPress={handleCancel} style={styles.cancelButton}>
         <Text style={styles.cancelButtonText}>Cancel</Text>
       </Pressable>
 
@@ -318,6 +402,20 @@ const styles = StyleSheet.create({
   },
   elevationText: { color: palette.textLo, fontSize: 12 },
   refreshText: { color: palette.amber, fontSize: 12 },
+  mediaRow: {
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: palette.line,
+    backgroundColor: palette.panel,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  mediaText: { color: palette.textHi, fontSize: 12, flex: 1, paddingRight: 8 },
+  mediaActions: { flexDirection: 'row', gap: 16 },
+  mediaHint: { color: palette.textLo, fontSize: 11, marginTop: 6, lineHeight: 15 },
   saveButton: {
     marginTop: 28,
     borderRadius: 8,
