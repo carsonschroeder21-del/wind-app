@@ -58,9 +58,10 @@ module.exports = {
         },
       ],
     ],
+    owner: 'carson6647',
     extra: {
       eas: {
-        projectId: '907d0fe9-b18c-40df-9c6f-6a6b4dd5d559',
+        projectId: '227dcdfe-1221-4c34-b773-507d58a4ee9f',
       },
     },
   },
