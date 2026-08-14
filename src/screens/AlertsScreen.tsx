@@ -1,5 +1,5 @@
 import Slider from '@react-native-community/slider';
-import { StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { ToggleRow } from '../components/ToggleRow';
 import { useAppStore } from '../state/store';
@@ -7,6 +7,10 @@ import { palette } from '../theme/palette';
 import type { AlertSensitivity } from '../types';
 
 const LEVELS = ['Major shifts only', 'Balanced', 'Any shift'];
+
+function formatHourLabel(hour: number): string {
+  return new Date(2000, 0, 1, hour).toLocaleTimeString(undefined, { hour: 'numeric' });
+}
 
 export function AlertsScreen() {
   const buzzOn = useAppStore((s) => s.buzzOn);
@@ -19,9 +23,13 @@ export function AlertsScreen() {
   const setCooldownWindowDays = useAppStore((s) => s.setCooldownWindowDays);
   const cooldownThreshold = useAppStore((s) => s.cooldownThreshold);
   const setCooldownThreshold = useAppStore((s) => s.setCooldownThreshold);
+  const goodSitNotificationsOn = useAppStore((s) => s.goodSitNotificationsOn);
+  const setGoodSitNotificationsOn = useAppStore((s) => s.setGoodSitNotificationsOn);
+  const goodSitCheckHour = useAppStore((s) => s.goodSitCheckHour);
+  const setGoodSitCheckHour = useAppStore((s) => s.setGoodSitCheckHour);
 
   return (
-    <View style={styles.container}>
+    <ScrollView contentContainerStyle={styles.container}>
       <ToggleRow
         label="Buzz on bad wind"
         sub="Bracelet vibrates when wind turns unfavorable"
@@ -80,12 +88,38 @@ export function AlertsScreen() {
         />
         <Text style={styles.levelText}>{cooldownThreshold}+ hunts</Text>
       </View>
-    </View>
+
+      <ToggleRow
+        label="Good sit window notifications"
+        sub="Once-daily check for a standout wind/thermal window 12-18h out"
+        checked={goodSitNotificationsOn}
+        onChange={setGoodSitNotificationsOn}
+      />
+
+      {goodSitNotificationsOn && (
+        <View style={styles.sensitivitySection}>
+          <Text style={styles.sensitivityLabel}>Check time</Text>
+          <Text style={styles.sensitivitySub}>Runs the first time the app is open at/after this hour each day</Text>
+          <Slider
+            style={styles.slider}
+            minimumValue={0}
+            maximumValue={23}
+            step={1}
+            value={goodSitCheckHour}
+            onValueChange={setGoodSitCheckHour}
+            minimumTrackTintColor={palette.amber}
+            maximumTrackTintColor={palette.line}
+            thumbTintColor={palette.amber}
+          />
+          <Text style={styles.levelText}>{formatHourLabel(goodSitCheckHour)}</Text>
+        </View>
+      )}
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, paddingHorizontal: 24, paddingTop: 8 },
+  container: { paddingHorizontal: 24, paddingTop: 8, paddingBottom: 24 },
   sensitivitySection: { paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: palette.line },
   sensitivityLabel: { color: palette.textHi, fontSize: 14, marginBottom: 10 },
   sensitivitySub: { color: palette.textLo, fontSize: 11, marginTop: -6, marginBottom: 10 },

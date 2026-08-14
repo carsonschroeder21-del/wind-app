@@ -143,6 +143,10 @@ src/
       loadMaps.ts               Guarded lazy require() of react-native-maps
     haptics.ts                On-phone buzz via expo-haptics, alongside the bracelet's
                                own vibrate command
+    notifications.ts           Local (device-scheduled, no server) notification wrapper —
+                               permission check/request + present-immediately. Only
+                               *remote* push lost Expo Go support on Android in recent
+                               SDKs; this doesn't use that path
   utils/
     thermal.ts                 Shared rising/sinking/transitioning + favorability logic,
                                used by the indicator, the recommendation engine, and
@@ -163,11 +167,19 @@ src/
                                recommendations, entry-route risk) goes through this now
     recommendation.ts          Scores each saved stand against current wind + thermal
                                conditions
+    sitWindow.ts                findGoodSitWindow() — scans each stand's 12-18h-out
+                               forecast for an hour where wind, thermal, and (if a parking
+                               pin's set) entry risk are all favorable at once; skips
+                               cooldown-flagged stands. High bar on purpose — see hook below
   hooks/
     useDeviceSync.ts           Subscribes device services into the store (mounted once,
                                at the root)
     useBadWindAlerts.ts        Buzzes the bracelet + phone when wind turns unfavorable,
                                respecting the Alerts screen's buzz/sensitivity/quiet-hours
+    useGoodSitWindowCheck.ts    Once-daily (Alerts screen: on/off + hour) check that runs
+                               sitWindow.ts across all stands and fires a local
+                               notification if something clears the bar — see "Good-sit
+                               notification notes" below
 plugins/withBluetoothPermissions.js  Expo config plugin adding the iOS Info.plist keys and
                                       Android manifest permissions BLE scanning needs
 app.config.js                Dynamic config (replaces app.json) — injects the Google Maps
@@ -201,6 +213,23 @@ Entries are created via the "Log This Hunt" button on the Home screen
 (`HuntLogModal.tsx`), always against the active stand — `standId` is only `null` for
 entries logged before per-stand tracking existed, which the cooldown tracker and
 recommendation engine simply skip when counting hunts against a specific stand.
+
+### Good-sit notification notes
+
+A local notification's title/body has to be set at schedule time — it can't be computed
+from a live forecast when the OS fires it later unless the JS app is actually running at
+that moment. True "fires even from fully closed" scheduling needs a background task
+(`expo-task-manager` + `expo-background-fetch`), which needs a custom dev client (won't
+run in plain Expo Go) and is opportunistic/not exact-time on iOS regardless — a similar
+effort tier to the real BLE bracelet integration below.
+
+`useGoodSitWindowCheck.ts` takes the pragmatic v1 instead: a periodic in-app check (every
+5 min, plus on mount) that runs the real evaluation and fires a real local notification
+the first time the app is open at/after the configured hour each day
+(`lastGoodSitCheckDateKey` tracks "already ran today," so it only fires once). This
+doesn't wake the app from fully closed — if the app never opens that day, no notification
+fires. Upgrading to true background scheduling later is additive (same evaluation logic
+in `sitWindow.ts`, just triggered from a background task instead of a mounted hook).
 
 ## Connecting a real bracelet later
 

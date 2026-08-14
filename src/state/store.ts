@@ -107,6 +107,15 @@ interface AppState {
   cooldownThreshold: number;
   setCooldownThreshold: (count: number) => void;
 
+  // Good-sit-window notification: whether it's on, what hour (local, 0-23) the once-daily
+  // check runs at, and the date (YYYY-MM-DD) it last ran — so it only fires once per day.
+  goodSitNotificationsOn: boolean;
+  setGoodSitNotificationsOn: (on: boolean) => void;
+  goodSitCheckHour: number;
+  setGoodSitCheckHour: (hour: number) => void;
+  lastGoodSitCheckDateKey: string | null;
+  markGoodSitChecked: (dateKey: string) => void;
+
   bracelet: BraceletStatus;
   setBraceletStatus: (status: BraceletStatus) => void;
   windSensor: WindSensorStatus;
@@ -171,6 +180,13 @@ export const useAppStore = create<AppState>()(
       cooldownThreshold: 3,
       setCooldownThreshold: (cooldownThreshold) => set({ cooldownThreshold }),
 
+      goodSitNotificationsOn: true,
+      setGoodSitNotificationsOn: (goodSitNotificationsOn) => set({ goodSitNotificationsOn }),
+      goodSitCheckHour: 18,
+      setGoodSitCheckHour: (goodSitCheckHour) => set({ goodSitCheckHour }),
+      lastGoodSitCheckDateKey: null,
+      markGoodSitChecked: (dateKey) => set({ lastGoodSitCheckDateKey: dateKey }),
+
       bracelet: { state: 'disconnected', deviceName: null, batteryPct: null, signal: null },
       setBraceletStatus: (bracelet) => set({ bracelet }),
       windSensor: { state: 'disconnected', deviceName: null },
@@ -208,6 +224,9 @@ export const useAppStore = create<AppState>()(
         quietHoursOn: state.quietHoursOn,
         cooldownWindowDays: state.cooldownWindowDays,
         cooldownThreshold: state.cooldownThreshold,
+        goodSitNotificationsOn: state.goodSitNotificationsOn,
+        goodSitCheckHour: state.goodSitCheckHour,
+        lastGoodSitCheckDateKey: state.lastGoodSitCheckDateKey,
         huntLog: state.huntLog,
         thermalLogs: state.thermalLogs,
         windHistory: state.windHistory,

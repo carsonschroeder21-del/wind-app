@@ -64,6 +64,7 @@ module.exports = {
           microphonePermission: false,
         },
       ],
+      'expo-notifications',
     ],
     owner: 'carson6647',
     extra: {
