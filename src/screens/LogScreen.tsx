@@ -1,25 +1,30 @@
-import { useState } from 'react';
-import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useMemo, useState } from 'react';
+import { FlatList, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { SeasonReport } from '../components/SeasonReport';
 import { useAppStore } from '../state/store';
 import { palette } from '../theme/palette';
 import { mono } from '../theme/typography';
 import type { HuntLogEntry, ThermalLogEntry } from '../types';
+import { buildSeasonReport } from '../utils/seasonReport';
 import { compareThermalObservation } from '../utils/thermal';
 import { formatLogTimestamp } from '../utils/time';
 
-type LogTab = 'hunts' | 'thermal';
+type LogTab = 'hunts' | 'thermal' | 'report';
 
 export function LogScreen() {
   const huntLog = useAppStore((s) => s.huntLog);
   const thermalLogs = useAppStore((s) => s.thermalLogs);
   const [view, setView] = useState<LogTab>('hunts');
 
+  const seasonReport = useMemo(() => buildSeasonReport(huntLog), [huntLog]);
+
   return (
     <View style={styles.screen}>
       <View style={styles.segmentRow}>
         <SegmentButton label="Hunts" active={view === 'hunts'} onPress={() => setView('hunts')} />
         <SegmentButton label="Thermal Log" active={view === 'thermal'} onPress={() => setView('thermal')} />
+        <SegmentButton label="Season Report" active={view === 'report'} onPress={() => setView('report')} />
       </View>
 
       {view === 'hunts' ? (
@@ -30,7 +35,7 @@ export function LogScreen() {
           ListEmptyComponent={<Text style={styles.emptyText}>No hunts logged yet.</Text>}
           renderItem={({ item }) => <HuntRow entry={item} />}
         />
-      ) : (
+      ) : view === 'thermal' ? (
         <FlatList
           data={thermalLogs}
           keyExtractor={(item) => item.id}
@@ -42,6 +47,10 @@ export function LogScreen() {
           }
           renderItem={({ item }) => <ThermalRow entry={item} />}
         />
+      ) : (
+        <ScrollView>
+          <SeasonReport report={seasonReport} />
+        </ScrollView>
       )}
     </View>
   );

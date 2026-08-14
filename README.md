@@ -97,7 +97,8 @@ App.tsx                     Root shell: TopBar + tab switch + BottomTabBar, wire
                              the device-sync and bad-wind-alert hooks.
 src/
   screens/                  HomeScreen, StandScreen (list + editor), AlertsScreen,
-                             DeviceScreen, LogScreen (Hunts / Thermal Log toggle)
+                             DeviceScreen, LogScreen (Hunts / Thermal Log / Season
+                             Report toggle)
   components/
     CompassDial.tsx          Wind cone (wedge, narrow at center → wide in the travel
                              direction) + dashed line for the active stand's facing
@@ -118,6 +119,9 @@ src/
                              against the active stand — src/utils/cooldown.ts reads these
     StandCooldownBanner.tsx   "Resting recommended" card for the stand detail screen, only
                              rendered when the stand is flagged (see cooldown.ts)
+    SeasonReport.tsx           Plain stat cards (src/utils/seasonReport.ts) — total sits,
+                             most-hunted/most-successful stand, best wind direction/time
+                             of day. Lives in LogScreen's third segment
     TopBar, BottomTabBar, ToggleRow/ToggleSwitch, StatusBadge
   state/store.ts             zustand store — wind reading, stands[] + activeStandId,
                              alert settings, device status, hunt log, thermal logs.
@@ -171,6 +175,11 @@ src/
                                forecast for an hour where wind, thermal, and (if a parking
                                pin's set) entry risk are all favorable at once; skips
                                cooldown-flagged stands. High bar on purpose — see hook below
+    seasonReport.ts              buildSeasonReport() — tallies HuntLogEntry rows by stand,
+                               wind-direction bucket (parsed from windLabel), and
+                               time-of-day bucket, weighting harvest > sighting > blank to
+                               pick a "best" of each; "best" fields are null until
+                               something in the log actually has a sighting or harvest
   hooks/
     useDeviceSync.ts           Subscribes device services into the store (mounted once,
                                at the root)
