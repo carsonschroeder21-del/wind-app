@@ -4,6 +4,7 @@ import { Alert, FlatList, Pressable, ScrollView, StyleSheet, Text, View } from '
 
 import { AllStandsMap } from '../components/AllStandsMap';
 import { StandEditor } from '../components/StandEditor';
+import { StandDetailScreen } from './StandDetailScreen';
 import { useAppStore } from '../state/store';
 import { palette } from '../theme/palette';
 import { mono } from '../theme/typography';
@@ -15,10 +16,10 @@ type StandView = 'list' | 'map';
 export function StandScreen() {
   const stands = useAppStore((s) => s.stands);
   const activeStandId = useAppStore((s) => s.activeStandId);
-  const setActiveStandId = useAppStore((s) => s.setActiveStandId);
   const deleteStand = useAppStore((s) => s.deleteStand);
 
   const [editingStandId, setEditingStandId] = useState<string | null | 'new'>(null);
+  const [detailStandId, setDetailStandId] = useState<string | null>(null);
   const [view, setView] = useState<StandView>('list');
 
   if (editingStandId !== null) {
@@ -28,6 +29,10 @@ export function StandScreen() {
         onDone={() => setEditingStandId(null)}
       />
     );
+  }
+
+  if (detailStandId !== null) {
+    return <StandDetailScreen standId={detailStandId} onBack={() => setDetailStandId(null)} />;
   }
 
   const handleDelete = (stand: Stand) => {
@@ -67,7 +72,7 @@ export function StandScreen() {
             const active = item.id === activeStandId;
             return (
               <Pressable
-                onPress={() => setActiveStandId(item.id)}
+                onPress={() => setDetailStandId(item.id)}
                 style={[styles.card, active && styles.cardActive]}
               >
                 <View style={styles.cardTop}>
@@ -100,7 +105,7 @@ export function StandScreen() {
                   </Text>
                 </View>
 
-                {!active && <Text style={styles.tapHint}>Tap to set active</Text>}
+                <Text style={styles.tapHint}>Tap to view conditions</Text>
               </Pressable>
             );
           }}

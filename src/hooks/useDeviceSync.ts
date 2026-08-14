@@ -25,12 +25,14 @@ export function useDeviceSync() {
     const unsubSensorReading = windSensor.onReading((reading) => {
       if (useAppStore.getState().windSensor.state === 'connected') {
         useAppStore.getState().setWind(reading);
+        useAppStore.getState().recordWindHistory(reading, 'live');
       }
     });
 
     const unsubRegional = regionalWindEstimator.onReading((reading) => {
       if (useAppStore.getState().windSensor.state !== 'connected') {
         useAppStore.getState().setWind(reading);
+        useAppStore.getState().recordWindHistory(reading, 'regional');
       }
     });
 

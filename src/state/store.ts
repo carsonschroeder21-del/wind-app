@@ -8,8 +8,10 @@ import type {
   HuntLogEntry,
   Stand,
   ThermalLogEntry,
+  WindHistoryEntry,
   WindReading,
   WindSensorStatus,
+  WindSource,
 } from '../types';
 import { genId } from '../utils/id';
 
@@ -90,7 +92,16 @@ interface AppState {
 
   thermalLogs: ThermalLogEntry[];
   addThermalLogEntry: (entry: ThermalLogEntry) => void;
+
+  windHistory: WindHistoryEntry[];
+  recordWindHistory: (reading: WindReading, source: WindSource) => void;
 }
+
+const WIND_HISTORY_MAX_AGE_MS = 96 * 60 * 60 * 1000;
+// Readings arrive every couple of seconds from the sensor/regional drift model — that's
+// far more resolution than a time slider scrubbed by hand needs, so only keep one entry
+// per interval to keep persisted storage small.
+const WIND_HISTORY_MIN_INTERVAL_MS = 5 * 60 * 1000;
 
 export const useAppStore = create<AppState>()(
   persist(
@@ -139,6 +150,17 @@ export const useAppStore = create<AppState>()(
 
       thermalLogs: [],
       addThermalLogEntry: (entry) => set((s) => ({ thermalLogs: [entry, ...s.thermalLogs] })),
+
+      windHistory: [],
+      recordWindHistory: (reading, source) =>
+        set((s) => {
+          const last = s.windHistory[s.windHistory.length - 1];
+          if (last && reading.updatedAt - last.updatedAt < WIND_HISTORY_MIN_INTERVAL_MS) return s;
+
+          const cutoff = reading.updatedAt - WIND_HISTORY_MAX_AGE_MS;
+          const windHistory = [...s.windHistory, { ...reading, source }].filter((e) => e.updatedAt >= cutoff);
+          return { windHistory };
+        }),
     }),
     {
       name: 'wind-scout-storage',
@@ -155,6 +177,7 @@ export const useAppStore = create<AppState>()(
         quietHoursOn: state.quietHoursOn,
         huntLog: state.huntLog,
         thermalLogs: state.thermalLogs,
+        windHistory: state.windHistory,
       }),
       // v1 stored a single flat stand (standFacingDeg/terrain/isEdge) instead of a
       // stands[] list — no real users yet, so just reseed a default stand rather than

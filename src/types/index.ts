@@ -73,3 +73,34 @@ export interface ThermalLogEntry {
   windDirectionDeg: number;
   windSpeedMph: number;
 }
+
+/** A recorded wind reading, tagged with which source produced it at the time — the
+ * historical half of the stand detail time slider can only trust a reading as "sensor
+ * data" if it was actually logged while the WeatherFlow was connected. */
+export interface WindHistoryEntry extends WindReading {
+  source: WindSource;
+}
+
+/** A single hourly wind point from the weather API's forecast (which also serves recent
+ * past hours via `past_days`), used for the historical-estimate and forecast portions of
+ * the time slider. */
+export interface WeatherPoint {
+  timestampMs: number;
+  directionDeg: number;
+  speedMph: number;
+}
+
+/** What's actually feeding the conditions shown at the time slider's current position. */
+export type ConditionsSource =
+  | 'live'
+  | 'regional'
+  | 'historical-sensor'
+  | 'historical-estimate'
+  | 'forecast'
+  | 'no-data';
+
+export interface ResolvedConditions {
+  source: ConditionsSource;
+  wind: WindReading | null;
+  label: string;
+}
