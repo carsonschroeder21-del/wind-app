@@ -27,6 +27,8 @@ export function AlertsScreen() {
   const setGoodSitNotificationsOn = useAppStore((s) => s.setGoodSitNotificationsOn);
   const goodSitCheckHour = useAppStore((s) => s.goodSitCheckHour);
   const setGoodSitCheckHour = useAppStore((s) => s.setGoodSitCheckHour);
+  const huntLogReminderOn = useAppStore((s) => s.huntLogReminderOn);
+  const setHuntLogReminderOn = useAppStore((s) => s.setHuntLogReminderOn);
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
@@ -114,6 +116,13 @@ export function AlertsScreen() {
           <Text style={styles.levelText}>{formatHourLabel(goodSitCheckHour)}</Text>
         </View>
       )}
+
+      <ToggleRow
+        label="Hunt log reminder"
+        sub="Prompt to log a hunt after you're back from a couple hours away with a stand active"
+        checked={huntLogReminderOn}
+        onChange={setHuntLogReminderOn}
+      />
     </ScrollView>
   );
 }

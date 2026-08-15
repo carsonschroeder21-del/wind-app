@@ -116,6 +116,16 @@ interface AppState {
   lastGoodSitCheckDateKey: string | null;
   markGoodSitChecked: (dateKey: string) => void;
 
+  // Hunt log reminder: nudges the hunter to log a hunt after a long-enough app absence
+  // with a stand active, since nothing else creates a HuntLogEntry automatically.
+  // `backgroundedAtMs` is set when the app leaves the foreground and cleared once
+  // consumed by the next foreground check — persisted so it survives the OS killing the
+  // app while backgrounded (the exact case this is meant to catch).
+  huntLogReminderOn: boolean;
+  setHuntLogReminderOn: (on: boolean) => void;
+  backgroundedAtMs: number | null;
+  setBackgroundedAtMs: (ms: number | null) => void;
+
   bracelet: BraceletStatus;
   setBraceletStatus: (status: BraceletStatus) => void;
   windSensor: WindSensorStatus;
@@ -187,6 +197,11 @@ export const useAppStore = create<AppState>()(
       lastGoodSitCheckDateKey: null,
       markGoodSitChecked: (dateKey) => set({ lastGoodSitCheckDateKey: dateKey }),
 
+      huntLogReminderOn: true,
+      setHuntLogReminderOn: (huntLogReminderOn) => set({ huntLogReminderOn }),
+      backgroundedAtMs: null,
+      setBackgroundedAtMs: (backgroundedAtMs) => set({ backgroundedAtMs }),
+
       bracelet: { state: 'disconnected', deviceName: null, batteryPct: null, signal: null },
       setBraceletStatus: (bracelet) => set({ bracelet }),
       windSensor: { state: 'disconnected', deviceName: null },
@@ -227,6 +242,8 @@ export const useAppStore = create<AppState>()(
         goodSitNotificationsOn: state.goodSitNotificationsOn,
         goodSitCheckHour: state.goodSitCheckHour,
         lastGoodSitCheckDateKey: state.lastGoodSitCheckDateKey,
+        huntLogReminderOn: state.huntLogReminderOn,
+        backgroundedAtMs: state.backgroundedAtMs,
         huntLog: state.huntLog,
         thermalLogs: state.thermalLogs,
         windHistory: state.windHistory,

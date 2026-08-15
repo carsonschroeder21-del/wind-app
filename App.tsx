@@ -8,6 +8,7 @@ import { TopBar } from './src/components/TopBar';
 import { useBadWindAlerts } from './src/hooks/useBadWindAlerts';
 import { useDeviceSync } from './src/hooks/useDeviceSync';
 import { useGoodSitWindowCheck } from './src/hooks/useGoodSitWindowCheck';
+import { useHuntLogReminder } from './src/hooks/useHuntLogReminder';
 import { AlertsScreen } from './src/screens/AlertsScreen';
 import { DeviceScreen } from './src/screens/DeviceScreen';
 import { HomeScreen } from './src/screens/HomeScreen';
@@ -30,6 +31,7 @@ function AppShell() {
   useDeviceSync();
   useBadWindAlerts();
   useGoodSitWindowCheck();
+  useHuntLogReminder();
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>

@@ -189,6 +189,9 @@ src/
                                sitWindow.ts across all stands and fires a local
                                notification if something clears the bar — see "Good-sit
                                notification notes" below
+    useHuntLogReminder.ts       Prompts to log a hunt (native Alert, two-step: confirm,
+                               then pick a sighting) after a 2h+ app background/foreground
+                               gap with a stand active — see "Hunt log notes" below
 plugins/withBluetoothPermissions.js  Expo config plugin adding the iOS Info.plist keys and
                                       Android manifest permissions BLE scanning needs
 app.config.js                Dynamic config (replaces app.json) — injects the Google Maps
@@ -222,6 +225,16 @@ Entries are created via the "Log This Hunt" button on the Home screen
 (`HuntLogModal.tsx`), always against the active stand — `standId` is only `null` for
 entries logged before per-stand tracking existed, which the cooldown tracker and
 recommendation engine simply skip when counting hunts against a specific stand.
+
+Nothing creates a `HuntLogEntry` automatically — `useHuntLogReminder.ts` is a backstop,
+not a second write path. It tracks `backgroundedAtMs` across app background/foreground
+transitions (persisted, so it survives the OS killing the app while backgrounded) and,
+on return from a 2h+ gap with a stand active and no entry already logged against it since
+then, prompts via a native `Alert` — confirm, then pick a sighting — and writes the same
+shape `HuntLogModal` does, just with an empty note and the wind reading at the moment you
+tap through rather than whenever the actual sit happened. It can't detect "you were
+hunting without ever backgrounding the app," and a fresh install won't prompt on its
+first-ever open (no prior gap to compare against). Toggle: Alerts screen.
 
 ### Good-sit notification notes
 
