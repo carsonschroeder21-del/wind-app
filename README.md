@@ -21,6 +21,9 @@ logic, with the state/persistence and device layers a real app needs.
   gesture — see "Home screen map layer" below
 - `expo-location` for GPS capture + Open-Meteo's free Elevation API for stand elevation
 - `lucide-react-native` for icons, matching the prototype's icon set
+- `@supabase/supabase-js` for cloud sync (hunt log / thermal log backup + the opt-in
+  anonymized training dataset) — degrades to local-only when unconfigured, see "Cloud
+  sync setup" below
 
 ## Running it
 
@@ -94,6 +97,43 @@ npx expo prebuild --clean
 npx expo run:ios      # or: npx expo run:android
 ```
 
+### Cloud sync setup
+
+`src/services/supabase/client.ts` needs a Supabase project — Expo Go and web both run
+fine without one (cloud sync just silently stays off, same pattern as the Maps/BLE
+fallbacks), but nothing syncs anywhere until it's configured.
+
+**1. Create the project and run the schema.**
+
+- Create a free project at [supabase.com](https://supabase.com).
+- Project Settings → API: copy the **Project URL** and the **anon / public key** (not the
+  service-role key — that one must never end up in the client).
+- Database → SQL Editor → New query: paste in the contents of `supabase/schema.sql` from
+  this repo and run it. That creates `hunt_log_entries`, `thermal_log_entries`, and
+  `thermal_training_contributions` with row-level security already wired up — see the
+  comments at the top of that file for exactly what each table's access boundary is.
+- Authentication → Providers: **Email** is on by default, which is all this app uses (no
+  password — see "Cloud sync notes" below). Nothing else to configure there.
+
+**2. Give the app the URL/key — never commit them:**
+
+```bash
+cp .env.example .env
+# edit .env, set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY
+```
+
+Unlike `GOOGLE_MAPS_API_KEY` (which has to be baked into native config via a plugin),
+these are read directly from `process.env` at runtime — Expo's Metro bundler inlines any
+`EXPO_PUBLIC_`-prefixed variable automatically, no `app.config.js` wiring needed, and no
+rebuild required after changing them (a dev-server restart is enough).
+
+For EAS cloud builds, set both as secrets instead of relying on a local `.env`:
+
+```bash
+eas secret:create --scope project --name EXPO_PUBLIC_SUPABASE_URL --value <your url> --type string
+eas secret:create --scope project --name EXPO_PUBLIC_SUPABASE_ANON_KEY --value <your anon key> --type string
+```
+
 ### Home screen map layer
 
 The Home screen shows the map as a background layer behind the compass dial (tightly
@@ -153,6 +193,9 @@ src/
     SeasonReport.tsx           Plain stat cards (src/utils/seasonReport.ts) — total sits,
                              most-hunted/most-successful stand, best wind direction/time
                              of day. Lives in LogScreen's third segment
+    AccountSyncSection.tsx     Email/code sign-in + sync status, and the separate
+                             opt-in-to-training toggle — see "Cloud sync notes" below.
+                             Lives on the Alerts screen (the app's de facto Settings)
     TopBar, BottomTabBar, ToggleRow/ToggleSwitch, StatusBadge
   state/store.ts             zustand store — wind reading, stands[] + activeStandId,
                              alert settings, device status, hunt log, thermal logs.
@@ -182,6 +225,15 @@ src/
                                permission check/request + present-immediately. Only
                                *remote* push lost Expo Go support on Android in recent
                                SDKs; this doesn't use that path
+    supabase/
+      client.ts                 Null when EXPO_PUBLIC_SUPABASE_URL/ANON_KEY aren't set —
+                               same detect-and-fall-back shape as maps/BLE. AsyncStorage-
+                               backed session persistence (Supabase's own, not zustand's)
+      auth.ts                   Email + 6-digit code sign-in (no password) —
+                               requestEmailCode() / verifyEmailCode() / signOut()
+      sync.ts                   pushHuntLogEntry() / pushThermalLogEntry() (private,
+                               per-account) and contributeThermalTrainingRow() (the
+                               anonymized opt-in copy) — see "Cloud sync notes" below
   utils/
     thermal.ts                 resolveThermalDirection() always resolves rising/sinking
                                (High confidence in a clear morning/evening window; a
@@ -229,6 +281,12 @@ src/
     useHuntLogReminder.ts       Prompts to log a hunt (native Alert, two-step: confirm,
                                then pick a sighting) after a 2h+ app background/foreground
                                gap with a stand active — see "Hunt log notes" below
+    useSupabaseAuth.ts           Mirrors Supabase's own session into the store (a live
+                               copy for synchronous reads elsewhere, not a second copy of
+                               the persistence — Supabase's client already persists it)
+    useCloudSync.ts              Always-on push of new hunt/thermal log entries once
+                               signed in, plus the training-contribution copy when opted
+                               in — see "Cloud sync notes" below
 plugins/withBluetoothPermissions.js  Expo config plugin adding the iOS Info.plist keys and
                                       Android manifest permissions BLE scanning needs
 app.config.js                Dynamic config (replaces app.json) — injects the Google Maps
@@ -321,6 +379,42 @@ the first time the app is open at/after the configured hour each day
 doesn't wake the app from fully closed — if the app never opens that day, no notification
 fires. Upgrading to true background scheduling later is additive (same evaluation logic
 in `sitWindow.ts`, just triggered from a background task instead of a mounted hook).
+
+### Cloud sync notes
+
+Two deliberately separate decisions, matching how they're presented in the Alerts screen
+(`AccountSyncSection.tsx`):
+
+- **Personal sync is unconditional.** Once signed in, every `HuntLogEntry` and
+  `ThermalLogEntry` pushes to that account's own `hunt_log_entries` /
+  `thermal_log_entries` tables — no separate toggle, no way to be signed in and *not*
+  backed up. `useCloudSync.ts` upserts by the entry's own client-generated id (so a retry
+  after a dropped response never double-inserts) on an effect that re-runs whenever a new
+  entry is added, the account changes, or the training toggle flips, plus a 2-minute
+  interval as a connectivity-loss retry fallback. `supabase/schema.sql`'s RLS restricts
+  every row to `auth.uid() = user_id` — no other account, and no unauthenticated request,
+  can read or write it.
+- **Training contribution is a separate, off-by-default opt-in.** When on,
+  `contributeThermalTrainingRow()` also inserts an anonymized copy of each *thermal* log
+  entry (not hunt log entries — those don't have a predicted/observed pair worth
+  evaluating a model against) into `thermal_training_contributions`. That table has no
+  `user_id` column at all, and drops every free-text/identifying field (stand name, your
+  note) — genuine anonymization at the schema level, not data that's merely
+  access-restricted. Its only RLS policy is `insert` `to authenticated`: signed-in users
+  can add a row (this gates spam, not identity — the row itself carries nothing that
+  traces back to who sent it), and nobody can read, update, or delete via the client API.
+  Querying it for actual model training happens from the Supabase dashboard or a
+  service-role key, outside the app entirely.
+
+**Auth is email + a 6-digit one-time code, not a password.** No password to set, store,
+or reset, and no deep-link handling to configure (a code you type is simpler than a
+magic-link redirect) — `requestEmailCode()`/`verifyEmailCode()` wrap Supabase's
+`signInWithOtp`/`verifyOtp`. First use of a new email creates the account automatically.
+
+**Not provisioned here.** Building this required creating a Supabase account/project,
+which needs real credentials this session doesn't have — the client, schema, and sync
+logic are complete and typecheck/bundle cleanly, but nothing syncs anywhere until a real
+project's URL/anon key are set (see "Cloud sync setup" above) and the schema's been run.
 
 ## Connecting a real bracelet later
 

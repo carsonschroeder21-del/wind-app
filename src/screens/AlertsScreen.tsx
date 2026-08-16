@@ -1,6 +1,7 @@
 import Slider from '@react-native-community/slider';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { AccountSyncSection } from '../components/AccountSyncSection';
 import { ToggleRow } from '../components/ToggleRow';
 import { useAppStore } from '../state/store';
 import { palette } from '../theme/palette';
@@ -123,6 +124,8 @@ export function AlertsScreen() {
         checked={huntLogReminderOn}
         onChange={setHuntLogReminderOn}
       />
+
+      <AccountSyncSection />
     </ScrollView>
   );
 }

@@ -126,6 +126,29 @@ interface AppState {
   backgroundedAtMs: number | null;
   setBackgroundedAtMs: (ms: number | null) => void;
 
+  // Cloud sync account. Not persisted here — Supabase's own client already persists the
+  // session to AsyncStorage; this is just a live mirror of it (set by useSupabaseAuth,
+  // mounted at the root) so the UI/sync hook can read "who's signed in" synchronously
+  // without an async lookup.
+  authUserId: string | null;
+  authEmail: string | null;
+  setAuthUser: (user: { id: string; email: string | null } | null) => void;
+
+  // Personal hunt-log/thermal-log sync happens automatically once signed in — always on,
+  // no separate toggle. Contributing an anonymized copy to the shared training dataset is
+  // a distinct, off-by-default opt-in.
+  shareForTraining: boolean;
+  setShareForTraining: (on: boolean) => void;
+  // Entry ids (shared id space across huntLog/thermalLogs — genId() is unique across
+  // both) already pushed to the account's private tables, and already contributed to the
+  // anonymized training table. Two separate lists because the two are separate decisions
+  // that can happen at different times (e.g. turning training-sharing on later triggers a
+  // catch-up pass over entries that were already personally synced).
+  syncedEntryIds: string[];
+  trainingContributedEntryIds: string[];
+  markEntriesSynced: (ids: string[]) => void;
+  markEntriesContributed: (ids: string[]) => void;
+
   bracelet: BraceletStatus;
   setBraceletStatus: (status: BraceletStatus) => void;
   windSensor: WindSensorStatus;
@@ -202,6 +225,24 @@ export const useAppStore = create<AppState>()(
       backgroundedAtMs: null,
       setBackgroundedAtMs: (backgroundedAtMs) => set({ backgroundedAtMs }),
 
+      authUserId: null,
+      authEmail: null,
+      setAuthUser: (user) => set({ authUserId: user?.id ?? null, authEmail: user?.email ?? null }),
+
+      shareForTraining: false,
+      setShareForTraining: (shareForTraining) => set({ shareForTraining }),
+      syncedEntryIds: [],
+      trainingContributedEntryIds: [],
+      markEntriesSynced: (ids) =>
+        set((s) => ({ syncedEntryIds: [...s.syncedEntryIds, ...ids.filter((id) => !s.syncedEntryIds.includes(id))] })),
+      markEntriesContributed: (ids) =>
+        set((s) => ({
+          trainingContributedEntryIds: [
+            ...s.trainingContributedEntryIds,
+            ...ids.filter((id) => !s.trainingContributedEntryIds.includes(id)),
+          ],
+        })),
+
       bracelet: { state: 'disconnected', deviceName: null, batteryPct: null, signal: null },
       setBraceletStatus: (bracelet) => set({ bracelet }),
       windSensor: { state: 'disconnected', deviceName: null },
@@ -244,6 +285,9 @@ export const useAppStore = create<AppState>()(
         lastGoodSitCheckDateKey: state.lastGoodSitCheckDateKey,
         huntLogReminderOn: state.huntLogReminderOn,
         backgroundedAtMs: state.backgroundedAtMs,
+        shareForTraining: state.shareForTraining,
+        syncedEntryIds: state.syncedEntryIds,
+        trainingContributedEntryIds: state.trainingContributedEntryIds,
         huntLog: state.huntLog,
         thermalLogs: state.thermalLogs,
         windHistory: state.windHistory,
