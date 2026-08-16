@@ -2,8 +2,7 @@ import { Thermometer } from 'lucide-react-native';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { palette } from '../theme/palette';
-import type { GameAreaRelativeElevation } from '../types';
-import type { TemperatureTrend } from '../utils/temperature';
+import type { GameAreaRelativeElevation, TemperatureTrend } from '../types';
 import { assessThermal } from '../utils/thermal';
 
 interface ThermalIndicatorProps {

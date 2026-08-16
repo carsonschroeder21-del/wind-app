@@ -336,12 +336,20 @@ once-a-day forecast scan doesn't share this limitation — it already has each s
 forecast series in hand for every candidate hour, so it computes a real per-stand,
 per-hour trend instead of reusing one.
 
-`ThermalLogEntry.confidence` preserves whatever confidence the prediction had at the
-exact moment a real observation was logged (`HomeScreen.tsx` logs `thermal.direction` /
-`thermal.confidence` from the same `assessThermal()` call the banner displays, not a
-separate computation) — intended for a future pass evaluating which conditions this
-rule-based model gets wrong most often, once training a better one is next. Shown
-alongside the predicted direction in the Log screen's Thermal Log rows.
+`ThermalLogEntry` preserves not just the outcome (`predicted`/`confidence`/`observed`)
+but the two inputs that produced it — `relativeElevation` and `temperatureTrend` — all
+logged from the exact same `assessThermal()` call the banner displayed at that moment,
+not a separate computation. Both are snapshotted rather than left to be looked up later:
+a stand's relative elevation can change after the fact, and re-deriving the temperature
+trend afterward would reflect conditions at query time, not at prediction time — either
+would silently rewrite what a past entry actually meant. `temperatureTrend` stays `null`
+when there was no trend data to work with (the prediction fell back to a time-of-day-only
+guess) rather than being coalesced into `'flat'`, since those are different, meaningful
+cases for evaluating the model later. The point of all this: a future pass evaluating
+which conditions this rule-based model gets wrong most often — or training a better one —
+has the actual features that went in, not just the prediction and what happened. Shown
+alongside the predicted direction in the Log screen's Thermal Log rows (confidence only —
+elevation/trend are logged for training, not surfaced in that UI).
 
 ### Hunt log notes
 

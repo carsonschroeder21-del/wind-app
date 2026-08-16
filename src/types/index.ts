@@ -129,6 +129,15 @@ export interface ThermalLogEntry {
   standId: string;
   standName: string;
   terrain: Terrain;
+  /** The stand's game-area relative elevation at the moment of prediction — one of the
+   * two inputs (alongside temperatureTrend) that decided `predicted`/`confidence`.
+   * Snapshotted rather than looked up later, since a stand's saved value can change
+   * after the fact and would otherwise silently rewrite what this entry meant. */
+  relativeElevation: GameAreaRelativeElevation;
+  /** The temperature trend `resolveThermalDirection()` had to work with — null means no
+   * trend data was available at prediction time (so the prediction fell back to a
+   * time-of-day-only guess), not that the trend was flat; a real "flat" reads as `'flat'`. */
+  temperatureTrend: TemperatureTrend | null;
   predicted: ThermalDirection;
   /** Confidence the prediction had at the moment it was logged — preserved so a future
    * model-evaluation pass can see which conditions the rule-based predictor was least
@@ -158,6 +167,10 @@ export interface WeatherPoint {
 }
 
 export type PressureTrend = 'rising' | 'falling' | 'steady';
+
+/** Rising/falling/flat trend used as the thermal-prediction tiebreaker during
+ * midday/transition windows — see src/utils/temperature.ts. */
+export type TemperatureTrend = 'rising' | 'falling' | 'flat';
 
 export interface PressureAssessment {
   trend: PressureTrend;

@@ -88,6 +88,8 @@ export function HomeScreen() {
         standId: activeStand.id,
         standName: activeStand.name,
         terrain: activeStand.terrain,
+        relativeElevation: activeStand.gameAreaRelativeElevation,
+        temperatureTrend,
         predicted: thermal.direction,
         confidence: thermal.confidence,
         observed,

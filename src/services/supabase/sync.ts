@@ -30,6 +30,8 @@ export async function pushThermalLogEntry(userId: string, entry: ThermalLogEntry
     stand_id: entry.standId,
     stand_name: entry.standName,
     terrain: entry.terrain,
+    relative_elevation: entry.relativeElevation,
+    temperature_trend: entry.temperatureTrend,
     predicted: entry.predicted,
     confidence: entry.confidence,
     observed: entry.observed,
@@ -41,16 +43,20 @@ export async function pushThermalLogEntry(userId: string, entry: ThermalLogEntry
 }
 
 /** The anonymized, opt-in copy — deliberately excludes anything that could identify a
- * person or a location (no user id, no stand name, no free-text note), keeping only the
- * fields that are actually useful for evaluating/training the thermal predictor. Requires
- * a signed-in session to write (RLS: `to authenticated`), which prevents anonymous
- * flooding of the table without linking the row's *content* back to that identity — the
- * row itself carries nothing that maps back to who sent it. */
+ * person or a location (no user id, no stand name, no free-text note), keeping the full
+ * set of inputs and outputs a future training pass would actually need: relativeElevation
+ * and temperatureTrend are the two inputs resolveThermalDirection() based
+ * predicted/confidence on, not just the outcome. Requires a signed-in session to write
+ * (RLS: `to authenticated`), which prevents anonymous flooding of the table without
+ * linking the row's *content* back to that identity — the row itself carries nothing that
+ * maps back to who sent it. */
 export async function contributeThermalTrainingRow(entry: ThermalLogEntry): Promise<boolean> {
   if (!supabase) return false;
   const { error } = await supabase.from('thermal_training_contributions').insert({
     entry_hour: new Date(entry.timestamp).getHours(),
     terrain: entry.terrain,
+    relative_elevation: entry.relativeElevation,
+    temperature_trend: entry.temperatureTrend,
     predicted: entry.predicted,
     confidence: entry.confidence,
     observed: entry.observed,

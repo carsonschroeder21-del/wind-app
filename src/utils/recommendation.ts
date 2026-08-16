@@ -1,9 +1,8 @@
-import type { EntryRouteAssessment, HuntLogEntry, Stand, StandCooldownStatus, WindReading } from '../types';
+import type { EntryRouteAssessment, HuntLogEntry, Stand, StandCooldownStatus, TemperatureTrend, WindReading } from '../types';
 import { angularDiff, isWindUnfavorable, windTravelDirection } from './compass';
 import { assessStandCooldown } from './cooldown';
 import { assessEntryRoute } from './entryRoute';
 import { gameAreaBearingDeg } from './gameArea';
-import type { TemperatureTrend } from './temperature';
 import { assessThermal } from './thermal';
 
 export interface StandRanking {

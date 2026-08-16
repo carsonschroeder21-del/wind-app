@@ -1,5 +1,4 @@
-import type { GameAreaRelativeElevation, ThermalConfidence, ThermalDirection, ThermalObservation } from '../types';
-import type { TemperatureTrend } from './temperature';
+import type { GameAreaRelativeElevation, TemperatureTrend, ThermalConfidence, ThermalDirection, ThermalObservation } from '../types';
 
 /** Morning: thermals rise (uphill). Evening: thermals sink (downhill). Everything else is
  * a transition window with no obvious direction from time-of-day alone. */

@@ -1,7 +1,5 @@
 import { nearestWeatherPoint } from '../services/weather/openMeteo';
-import type { WeatherPoint } from '../types';
-
-export type TemperatureTrend = 'rising' | 'falling' | 'flat';
+import type { TemperatureTrend, WeatherPoint } from '../types';
 
 // Same lookback as the pressure trend tracker — long enough to smooth out hourly noise.
 const LOOKBACK_HOURS = 3;

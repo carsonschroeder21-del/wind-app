@@ -37,6 +37,13 @@ create table if not exists public.thermal_log_entries (
   stand_id text not null,
   stand_name text not null,
   terrain text not null,
+  -- The two inputs resolveThermalDirection()/assessThermal() based predicted/confidence
+  -- on — kept alongside the outcome so a future training pass has actual features, not
+  -- just outcomes. temperature_trend is nullable: null means no trend data was available
+  -- at prediction time (fell back to a time-of-day-only guess), which is a different,
+  -- meaningful case from a real 'flat' trend, so it's not coalesced into one value.
+  relative_elevation text not null check (relative_elevation in ('above', 'level', 'below')),
+  temperature_trend text check (temperature_trend in ('rising', 'falling', 'flat')),
   predicted text not null,
   confidence text not null,
   observed text not null,
@@ -44,6 +51,11 @@ create table if not exists public.thermal_log_entries (
   wind_speed_mph integer not null,
   synced_at timestamptz not null default now()
 );
+
+-- Safe to re-run: adds the two columns above if this table was created before they
+-- existed, no-ops otherwise.
+alter table public.thermal_log_entries add column if not exists relative_elevation text;
+alter table public.thermal_log_entries add column if not exists temperature_trend text;
 
 create index if not exists hunt_log_entries_user_id_idx on public.hunt_log_entries(user_id);
 create index if not exists thermal_log_entries_user_id_idx on public.thermal_log_entries(user_id);
@@ -70,6 +82,8 @@ create table if not exists public.thermal_training_contributions (
   id bigint generated always as identity primary key,
   entry_hour integer not null check (entry_hour >= 0 and entry_hour <= 23),
   terrain text not null,
+  relative_elevation text not null check (relative_elevation in ('above', 'level', 'below')),
+  temperature_trend text check (temperature_trend in ('rising', 'falling', 'flat')),
   predicted text not null,
   confidence text not null,
   observed text not null,
@@ -77,6 +91,9 @@ create table if not exists public.thermal_training_contributions (
   wind_speed_mph integer not null,
   contributed_at timestamptz not null default now()
 );
+
+alter table public.thermal_training_contributions add column if not exists relative_elevation text;
+alter table public.thermal_training_contributions add column if not exists temperature_trend text;
 
 alter table public.thermal_training_contributions enable row level security;
 
