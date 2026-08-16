@@ -2,12 +2,14 @@ import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { CompassDial } from '../components/CompassDial';
+import { HomeMapReveal, HOME_MAP_COMPACT_HEIGHT } from '../components/HomeMapReveal';
 import { HuntLogModal } from '../components/HuntLogModal';
 import { PressureIndicator } from '../components/PressureIndicator';
 import { StandRecommendation } from '../components/StandRecommendation';
 import { StatusBadge } from '../components/StatusBadge';
 import { ThermalIndicator } from '../components/ThermalIndicator';
 import { ThermalLogModal } from '../components/ThermalLogModal';
+import { loadMaps } from '../services/maps/loadMaps';
 import { fetchWeatherSeries } from '../services/weather/openMeteo';
 import { useAppStore } from '../state/store';
 import { palette } from '../theme/palette';
@@ -37,6 +39,7 @@ export function HomeScreen() {
   const [logModalVisible, setLogModalVisible] = useState(false);
   const [huntLogModalVisible, setHuntLogModalVisible] = useState(false);
   const [weatherSeries, setWeatherSeries] = useState<WeatherPoint[] | null>(null);
+  const [rootHeight, setRootHeight] = useState(0);
 
   useEffect(() => {
     if (activeStand?.latitude == null || activeStand?.longitude == null) {
@@ -66,6 +69,13 @@ export function HomeScreen() {
     cooldownWindowDays,
     cooldownThreshold,
   });
+
+  // Background map layer only makes sense with a real stand to center on, and only
+  // renders anywhere react-native-maps actually works (dev-client/EAS build) — same
+  // Expo-Go/web fallback the Stand tab's map already uses, just applied one level up so
+  // the compass dial/banners render exactly as before when it's not available.
+  const mapsAvailable = loadMaps() != null;
+  const useMapLayer = mapsAvailable && activeStand != null;
 
   const handleSubmitObservation = (observed: ThermalObservation) => {
     if (activeStand) {
@@ -101,8 +111,8 @@ export function HomeScreen() {
     setHuntLogModalVisible(false);
   };
 
-  return (
-    <ScrollView contentContainerStyle={styles.container}>
+  const dialSection = (
+    <>
       <StatusBadge live={windSensorConnected} />
 
       <View style={styles.dialWrap}>
@@ -115,25 +125,31 @@ export function HomeScreen() {
         </View>
       </View>
 
+      {activeStand && (
+        <View
+          style={[
+            styles.banner,
+            {
+              backgroundColor: isBad ? 'rgba(193,87,63,0.15)' : 'rgba(127,174,118,0.15)',
+              borderColor: isBad ? palette.bad : palette.good,
+            },
+          ]}
+        >
+          <View style={[styles.bannerDot, { backgroundColor: isBad ? palette.bad : palette.good }]} />
+          <Text style={styles.bannerText}>
+            {isBad
+              ? 'Scent likely carrying toward your target area.'
+              : 'Wind is carrying away from your target area.'}
+          </Text>
+        </View>
+      )}
+    </>
+  );
+
+  const bodyContent = (
+    <>
       {activeStand ? (
         <>
-          <View
-            style={[
-              styles.banner,
-              {
-                backgroundColor: isBad ? 'rgba(193,87,63,0.15)' : 'rgba(127,174,118,0.15)',
-                borderColor: isBad ? palette.bad : palette.good,
-              },
-            ]}
-          >
-            <View style={[styles.bannerDot, { backgroundColor: isBad ? palette.bad : palette.good }]} />
-            <Text style={styles.bannerText}>
-              {isBad
-                ? 'Scent likely carrying toward your target area.'
-                : 'Wind is carrying away from your target area.'}
-            </Text>
-          </View>
-
           <ThermalIndicator hour={hour} gameAreaRelativeElevation={activeStand.gameAreaRelativeElevation} />
 
           {pressure && <PressureIndicator assessment={pressure} />}
@@ -168,6 +184,29 @@ export function HomeScreen() {
       )}
 
       <StandRecommendation rankings={rankings} activeStandId={activeStandId} onSelect={setActiveStandId} />
+    </>
+  );
+
+  return (
+    <View style={styles.root} onLayout={(e) => setRootHeight(e.nativeEvent.layout.height)}>
+      {useMapLayer && (
+        <HomeMapReveal
+          stands={stands}
+          activeStand={activeStand}
+          activeStandId={activeStandId}
+          onSelectStand={setActiveStandId}
+          fullHeight={rootHeight}
+        >
+          {dialSection}
+        </HomeMapReveal>
+      )}
+
+      <ScrollView
+        contentContainerStyle={[styles.container, useMapLayer && { paddingTop: HOME_MAP_COMPACT_HEIGHT + 24 }]}
+      >
+        {!useMapLayer && dialSection}
+        {bodyContent}
+      </ScrollView>
 
       <ThermalLogModal
         visible={logModalVisible}
@@ -183,11 +222,12 @@ export function HomeScreen() {
           onSubmit={handleSubmitHunt}
         />
       )}
-    </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  root: { flex: 1 },
   container: { flexGrow: 1, alignItems: 'center', paddingHorizontal: 24, paddingTop: 24, paddingBottom: 24 },
   dialWrap: { alignItems: 'center' },
   mphWrap: { marginTop: 12, alignItems: 'center' },

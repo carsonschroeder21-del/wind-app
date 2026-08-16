@@ -13,8 +13,12 @@ logic, with the state/persistence and device layers a real app needs.
 - `zustand` + `@react-native-async-storage/async-storage` for state/persistence
 - `react-native-svg` for the compass dial (wind cone + dashed game-direction line)
 - `react-native-ble-plx` for the real bracelet BLE connection (dev-client/EAS build only)
-- `react-native-maps` for the interactive Google Map on the Stand screen (dev-client/EAS
+- `react-native-maps` for the interactive Google Map on the Stand screen and — reusing
+  the same map component — as a background layer on the Home screen (dev-client/EAS
   build only — see "Google Maps setup" below)
+- `react-native-gesture-handler` + `react-native-reanimated` (+ its `react-native-worklets`
+  peer) for the Home screen's map expand/collapse animation and swipe-down-to-collapse
+  gesture — see "Home screen map layer" below
 - `expo-location` for GPS capture + Open-Meteo's free Elevation API for stand elevation
 - `lucide-react-native` for icons, matching the prototype's icon set
 
@@ -90,6 +94,27 @@ npx expo prebuild --clean
 npx expo run:ios      # or: npx expo run:android
 ```
 
+### Home screen map layer
+
+The Home screen shows the map as a background layer behind the compass dial (tightly
+zoomed on the active stand, dial/banner over a dark scrim) — tap it to expand into the
+same all-stands view `AllStandsMapView` shows on the Stand tab's Map segment, animating
+the card's size and the map's own region together; collapse back via the header's button
+or an interactive swipe-down on its grabber handle (`HomeMapReveal.tsx`).
+
+This inherits `react-native-maps`' dev-client-only requirement (see "Google Maps setup"
+above) — in Expo Go or on web, the Home screen falls back to exactly its old plain
+scrollable layout (`HomeScreen.tsx` checks `loadMaps() != null` before rendering the map
+card at all), so there's no dead card or broken tap target where the map can't run.
+
+**Untested in this environment:** the size/opacity animation, the region pan/zoom, and
+the swipe-down gesture were all written against the installed package's actual type
+definitions and API signatures (checked directly in `node_modules`, since network access
+to the Expo docs was blocked here) and the whole app typechecks and bundles cleanly, but
+none of it has been run interactively — that needs a dev-client build on a real device or
+simulator, which this sandboxed session can't produce. Sanity-check the feel (timing,
+commit threshold, grabber hit area) on an actual build before relying on it.
+
 ## Architecture
 
 ```
@@ -110,7 +135,12 @@ src/
                              game-area relative elevation
     StandMapPicker.tsx       Single-pin Google Map for the editor — tap/drag to set a
                              stand's coordinates
-    AllStandsMap.tsx         Every saved stand as a pin, tap one to open its editor
+    AllStandsMap.tsx         Every saved stand as a pin, tap one to open its editor.
+                             Also exports AllStandsMapView (bare map + pins, ref-forwarded)
+                             and regionForStands() — the real map-rendering + bounds-fit
+                             logic both this and HomeMapReveal share
+    HomeMapReveal.tsx         Home screen's collapsed-card/full-screen map layer — see
+                             "Home screen map layer" below
     StandRecommendation.tsx  Ranked stand list (src/utils/recommendation.ts) with
                              one-tap "switch active stand"
     ThermalLogModal.tsx      Rising/sinking/unsure prompt for predicted-vs-observed
