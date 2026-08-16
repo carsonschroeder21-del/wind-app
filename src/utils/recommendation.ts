@@ -3,6 +3,7 @@ import { angularDiff, isWindUnfavorable, windTravelDirection } from './compass';
 import { assessStandCooldown } from './cooldown';
 import { assessEntryRoute } from './entryRoute';
 import { gameAreaBearingDeg } from './gameArea';
+import type { TemperatureTrend } from './temperature';
 import { assessThermal } from './thermal';
 
 export interface StandRanking {
@@ -34,6 +35,12 @@ export interface RankStandsInput {
   huntLog: HuntLogEntry[];
   cooldownWindowDays: number;
   cooldownThreshold: number;
+  /** Reused across every stand in the ranking, not fetched per-stand — whichever
+   * temperature trend is already on hand (the active/on-screen stand's) is applied
+   * app-wide as the midday/transition tiebreaker, rather than firing a weather fetch per
+   * stand on every ranking pass. Reasonable for stands on the same property; less exact
+   * for stands far apart. Null when there's no trend data yet. */
+  temperatureTrend: TemperatureTrend | null;
 }
 
 /** Ranks saved stands by how favorable current wind + thermal conditions are for each
@@ -49,12 +56,13 @@ export function rankStands({
   huntLog,
   cooldownWindowDays,
   cooldownThreshold,
+  temperatureTrend,
 }: RankStandsInput): StandRanking[] {
   const rankings = stands.map((stand): StandRanking => {
     const gameBearingDeg = gameAreaBearingDeg(stand);
     const windMarginDeg = angularDiff(windTravelDirection(wind.directionDeg), gameBearingDeg);
     const windFavorable = !isWindUnfavorable(wind.directionDeg, gameBearingDeg);
-    const thermal = assessThermal(hour, stand.gameAreaRelativeElevation);
+    const thermal = assessThermal(hour, stand.gameAreaRelativeElevation, temperatureTrend);
     const cooldown = assessStandCooldown(stand.id, huntLog, nowMs, cooldownWindowDays, cooldownThreshold);
 
     let score = windFavorable ? WIND_WEIGHT : -WIND_WEIGHT;

@@ -19,7 +19,8 @@ import { isWindUnfavorable, toCompass } from '../utils/compass';
 import { gameAreaBearingDeg } from '../utils/gameArea';
 import { assessPressureTrend } from '../utils/pressure';
 import { rankStands } from '../utils/recommendation';
-import { assessThermal, getThermalDirection } from '../utils/thermal';
+import { assessTemperatureTrend } from '../utils/temperature';
+import { assessThermal } from '../utils/thermal';
 import { formatRelativeTime } from '../utils/time';
 import { genId } from '../utils/id';
 
@@ -58,7 +59,8 @@ export function HomeScreen() {
   const hour = new Date().getHours();
   const gameBearingDeg = activeStand != null ? gameAreaBearingDeg(activeStand) : null;
   const isBad = gameBearingDeg != null && isWindUnfavorable(wind.directionDeg, gameBearingDeg);
-  const thermal = assessThermal(hour, activeStand?.gameAreaRelativeElevation ?? 'level');
+  const temperatureTrend = assessTemperatureTrend(weatherSeries, Date.now());
+  const thermal = assessThermal(hour, activeStand?.gameAreaRelativeElevation ?? 'level', temperatureTrend);
   const pressure = assessPressureTrend(weatherSeries, Date.now());
   const rankings = rankStands({
     stands,
@@ -68,6 +70,7 @@ export function HomeScreen() {
     huntLog,
     cooldownWindowDays,
     cooldownThreshold,
+    temperatureTrend,
   });
 
   // Background map layer only makes sense with a real stand to center on, and only
@@ -85,7 +88,8 @@ export function HomeScreen() {
         standId: activeStand.id,
         standName: activeStand.name,
         terrain: activeStand.terrain,
-        predicted: getThermalDirection(hour),
+        predicted: thermal.direction,
+        confidence: thermal.confidence,
         observed,
         windDirectionDeg: wind.directionDeg,
         windSpeedMph: wind.speedMph,
@@ -150,7 +154,11 @@ export function HomeScreen() {
     <>
       {activeStand ? (
         <>
-          <ThermalIndicator hour={hour} gameAreaRelativeElevation={activeStand.gameAreaRelativeElevation} />
+          <ThermalIndicator
+            hour={hour}
+            gameAreaRelativeElevation={activeStand.gameAreaRelativeElevation}
+            temperatureTrend={temperatureTrend}
+          />
 
           {pressure && <PressureIndicator assessment={pressure} />}
 

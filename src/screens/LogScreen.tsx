@@ -114,6 +114,12 @@ const PREDICTED_LABEL: Record<ThermalLogEntry['predicted'], string> = {
   transitioning: 'Unstable',
 };
 
+const CONFIDENCE_LABEL: Record<ThermalLogEntry['confidence'], string> = {
+  high: 'High',
+  medium: 'Medium',
+  low: 'Low',
+};
+
 function ThermalRow({ entry }: { entry: ThermalLogEntry }) {
   const comparison = compareThermalObservation(entry.predicted, entry.observed);
   const color = comparison === 'match' ? palette.good : comparison === 'mismatch' ? palette.bad : palette.textLo;
@@ -134,8 +140,9 @@ function ThermalRow({ entry }: { entry: ThermalLogEntry }) {
         </View>
       </View>
       <Text style={styles.noteText}>
-        Predicted {PREDICTED_LABEL[entry.predicted]} · Observed {OBSERVATION_LABEL[entry.observed]} ·{' '}
-        {entry.windSpeedMph} mph
+        Predicted {PREDICTED_LABEL[entry.predicted]}
+        {entry.confidence ? ` (${CONFIDENCE_LABEL[entry.confidence]} confidence)` : ''} · Observed{' '}
+        {OBSERVATION_LABEL[entry.observed]} · {entry.windSpeedMph} mph
       </Text>
     </View>
   );

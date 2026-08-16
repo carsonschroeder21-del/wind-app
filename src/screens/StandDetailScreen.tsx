@@ -21,6 +21,7 @@ import { assessStandCooldown } from '../utils/cooldown';
 import { resolveConditionsAtTime } from '../utils/conditionsAtTime';
 import { assessEntryRoute, findBestEntryWindow } from '../utils/entryRoute';
 import { gameAreaBearingDeg } from '../utils/gameArea';
+import { assessTemperatureTrend } from '../utils/temperature';
 
 function buildPanoramaHotspots(wind: WindReading, gameBearingDeg: number, isBad: boolean): PanoramaHotspotInput[] {
   const goingDir = windTravelDirection(wind.directionDeg);
@@ -102,6 +103,7 @@ export function StandDetailScreen({ standId, onBack }: StandDetailScreenProps) {
   });
 
   const gameBearingDeg = gameAreaBearingDeg(stand);
+  const temperatureTrend = assessTemperatureTrend(weatherSeries, targetMs);
   const cooldown = assessStandCooldown(stand.id, huntLog, nowMs, cooldownWindowDays, cooldownThreshold);
   const isBad = resolved.wind != null && isWindUnfavorable(resolved.wind.directionDeg, gameBearingDeg);
   const isActive = stand.id === activeStandId;
@@ -214,7 +216,11 @@ export function StandDetailScreen({ standId, onBack }: StandDetailScreenProps) {
           </View>
         )}
 
-        <ThermalIndicator hour={hour} gameAreaRelativeElevation={stand.gameAreaRelativeElevation} />
+        <ThermalIndicator
+          hour={hour}
+          gameAreaRelativeElevation={stand.gameAreaRelativeElevation}
+          temperatureTrend={temperatureTrend}
+        />
 
         {cooldown.flagged && <StandCooldownBanner cooldown={cooldown} />}
 

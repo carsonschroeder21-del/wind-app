@@ -118,6 +118,11 @@ export interface StandCooldownStatus {
 export type ThermalDirection = 'rising' | 'sinking' | 'transitioning';
 export type ThermalObservation = 'rising' | 'sinking' | 'unsure';
 
+/** How clear-cut a thermal prediction is: High for a clear morning/evening window, Medium
+ * when a real temperature trend broke a midday/transition tie, Low when the tie had to
+ * fall back to a time-of-day guess with no temperature signal to go on. */
+export type ThermalConfidence = 'high' | 'medium' | 'low';
+
 export interface ThermalLogEntry {
   id: string;
   timestamp: number;
@@ -125,6 +130,10 @@ export interface ThermalLogEntry {
   standName: string;
   terrain: Terrain;
   predicted: ThermalDirection;
+  /** Confidence the prediction had at the moment it was logged — preserved so a future
+   * model-evaluation pass can see which conditions the rule-based predictor was least
+   * sure about, not just where it was outright wrong. */
+  confidence: ThermalConfidence;
   observed: ThermalObservation;
   windDirectionDeg: number;
   windSpeedMph: number;
@@ -145,6 +154,7 @@ export interface WeatherPoint {
   directionDeg: number;
   speedMph: number;
   pressureHpa: number;
+  temperatureF: number;
 }
 
 export type PressureTrend = 'rising' | 'falling' | 'steady';

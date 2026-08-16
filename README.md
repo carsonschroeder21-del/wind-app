@@ -127,7 +127,8 @@ src/
   components/
     CompassDial.tsx          Wind cone (wedge, narrow at center → wide in the travel
                              direction) + dashed line for the active stand's facing
-    ThermalIndicator.tsx     Rising/sinking/unstable, driven by src/utils/thermal.ts
+    ThermalIndicator.tsx     Always-resolved rising/sinking + a High/Medium/Low
+                             confidence label, driven by src/utils/thermal.ts
     PressureIndicator.tsx    Rising/falling/steady barometric trend, driven by
                              src/utils/pressure.ts
     StandEditor.tsx          Name, terrain/edge, facing slider (fallback), interactive
@@ -182,9 +183,15 @@ src/
                                *remote* push lost Expo Go support on Android in recent
                                SDKs; this doesn't use that path
   utils/
-    thermal.ts                 Shared rising/sinking/transitioning + favorability logic,
-                               used by the indicator, the recommendation engine, and
-                               thermal logging
+    thermal.ts                 resolveThermalDirection() always resolves rising/sinking
+                               (High confidence in a clear morning/evening window; a
+                               midday/transition tie goes to the temperature trend at
+                               Medium, or a time-of-day-only guess at Low) — see "Thermal
+                               prediction notes" below. assessThermal() layers the
+                               above/below/level favorability on top; used by the
+                               indicator, the recommendation engine, and thermal logging
+    temperature.ts               assessTemperatureTrend() — same shape as pressure.ts's
+                               trend check, but over temperature; thermal.ts's tiebreaker
     pressure.ts                 assessPressureTrend() — compares current vs. ~3h-ago
                                pressure from the weather series to call rising/falling/
                                steady; falling is framed as favorable (more deer movement)
@@ -245,6 +252,38 @@ this field existed — a facing angle (`facingDeg`) treated as a bearing from th
 feature that reasons about "which way is the game" (bad wind alerts, the compass dial,
 stand recommendations, entry-route risk) goes through it rather than reading either field
 directly.
+
+### Thermal prediction notes
+
+`getThermalDirection(hour)` only ever returns a real direction for a clear morning
+(5-11am) or evening (4-9pm) window — everything else is a "transition" period with no
+obvious direction from time-of-day alone. Rather than surface that as an unknown/unstable
+state, `resolveThermalDirection()` always resolves to `rising` or `sinking`: outside a
+transition window it's just that window's direction at High confidence; inside one, a
+real temperature trend (from the same hourly weather series `pressure.ts` already reads —
+`assessTemperatureTrend()`, ±2°F over ~3h to count as real rather than noise) breaks the
+tie at Medium confidence, and with no trend data (or a flat one) it falls back to a
+time-of-day-only guess (still-warming early-mid afternoon leans rising, the overnight/
+early-morning stretch leans sinking) at Low confidence. `assessThermal()` always calls
+this now, so the level-terrain "no favorability either way" case is the only remaining
+neutral state — every stand gets a real direction and a real recommendation-engine score
+at every hour.
+
+The recommendation engine ranks every stand in one pass but only has a temperature series
+on hand for whichever stand is already on-screen — rather than fire a weather fetch per
+stand on every ranking pass (wind updates every few seconds), `rankStands()` takes a
+single `temperatureTrend` and reuses it as the tiebreaker for every stand. Reasonable for
+stands on the same property; less exact for stands far apart. `sitWindow.ts`'s
+once-a-day forecast scan doesn't share this limitation — it already has each stand's own
+forecast series in hand for every candidate hour, so it computes a real per-stand,
+per-hour trend instead of reusing one.
+
+`ThermalLogEntry.confidence` preserves whatever confidence the prediction had at the
+exact moment a real observation was logged (`HomeScreen.tsx` logs `thermal.direction` /
+`thermal.confidence` from the same `assessThermal()` call the banner displays, not a
+separate computation) — intended for a future pass evaluating which conditions this
+rule-based model gets wrong most often, once training a better one is next. Shown
+alongside the predicted direction in the Log screen's Thermal Log rows.
 
 ### Hunt log notes
 

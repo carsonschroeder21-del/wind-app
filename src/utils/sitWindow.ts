@@ -3,6 +3,7 @@ import { assessStandCooldown } from './cooldown';
 import { isWindUnfavorable } from './compass';
 import { assessEntryRoute } from './entryRoute';
 import { gameAreaBearingDeg } from './gameArea';
+import { assessTemperatureTrend } from './temperature';
 import { assessThermal } from './thermal';
 
 // The daily check runs in the evening and looks specifically at the 12-18h-out window —
@@ -66,7 +67,8 @@ export function findGoodSitWindow({
       const wind: WindReading = { directionDeg: point.directionDeg, speedMph: point.speedMph, updatedAt: point.timestampMs };
       if (isWindUnfavorable(wind.directionDeg, gameBearingDeg)) continue;
 
-      const thermal = assessThermal(new Date(point.timestampMs).getHours(), stand.gameAreaRelativeElevation);
+      const temperatureTrend = assessTemperatureTrend(series, point.timestampMs);
+      const thermal = assessThermal(new Date(point.timestampMs).getHours(), stand.gameAreaRelativeElevation, temperatureTrend);
       if (thermal.favorable !== true) continue;
 
       if (hasParking) {

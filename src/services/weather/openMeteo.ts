@@ -17,8 +17,8 @@ function cacheKey(latitude: number, longitude: number): string {
   return `${latitude.toFixed(2)},${longitude.toFixed(2)}`;
 }
 
-/** Fetches an hourly weather time series — wind + barometric pressure, recent past
- * through multi-day forecast — from Open-Meteo's free forecast API
+/** Fetches an hourly weather time series — wind + barometric pressure + temperature,
+ * recent past through multi-day forecast — from Open-Meteo's free forecast API
  * (https://open-meteo.com/en/docs), which also serves `past_days` of recent history in
  * the same call. No API key required, same provider already used for elevation lookups.
  * Returns null on failure. */
@@ -32,7 +32,8 @@ export async function fetchWeatherSeries(latitude: number, longitude: number): P
   try {
     const url =
       `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}` +
-      `&hourly=wind_speed_10m,wind_direction_10m,pressure_msl&wind_speed_unit=mph` +
+      `&hourly=wind_speed_10m,wind_direction_10m,pressure_msl,temperature_2m` +
+      `&wind_speed_unit=mph&temperature_unit=fahrenheit` +
       `&past_days=${PAST_DAYS}&forecast_days=${FORECAST_DAYS}&timezone=auto`;
     const response = await fetch(url);
     if (!response.ok) return cached?.points ?? null;
@@ -44,7 +45,8 @@ export async function fetchWeatherSeries(latitude: number, longitude: number): P
     // Mean-sea-level pressure — comparable across stands at different elevations, unlike
     // raw station pressure.
     const pressures: number[] | undefined = data?.hourly?.pressure_msl;
-    if (!times || !speeds || !directions || !pressures) return cached?.points ?? null;
+    const temperatures: number[] | undefined = data?.hourly?.temperature_2m;
+    if (!times || !speeds || !directions || !pressures || !temperatures) return cached?.points ?? null;
 
     const points: WeatherPoint[] = times.map((time, i) => ({
       // Open-Meteo returns local time (no offset) when timezone=auto — parsed as local,
@@ -53,6 +55,7 @@ export async function fetchWeatherSeries(latitude: number, longitude: number): P
       speedMph: Math.round(speeds[i]),
       directionDeg: Math.round(directions[i]),
       pressureHpa: Math.round(pressures[i] * 10) / 10,
+      temperatureF: Math.round(temperatures[i]),
     }));
 
     cache.set(key, { fetchedAt: Date.now(), points });
