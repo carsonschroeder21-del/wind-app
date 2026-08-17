@@ -44,6 +44,7 @@ module.exports = {
     plugins: [
       'expo-dev-client',
       './plugins/withBluetoothPermissions',
+      './plugins/withKotlinExperimentalOptIn',
       [
         'expo-location',
         {
