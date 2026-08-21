@@ -16,11 +16,13 @@ import { AlertsScreen } from './src/screens/AlertsScreen';
 import { DeviceScreen } from './src/screens/DeviceScreen';
 import { HomeScreen } from './src/screens/HomeScreen';
 import { LogScreen } from './src/screens/LogScreen';
+import { MapScreen } from './src/screens/MapScreen';
 import { StandScreen } from './src/screens/StandScreen';
 import { palette } from './src/theme/palette';
 import type { TabId } from './src/types';
 
 const TITLES: Record<TabId, string> = {
+  map: 'Your Stands',
   home: 'Live Wind',
   stand: 'Set Your Stand',
   alerts: 'Alert Settings',
@@ -29,7 +31,7 @@ const TITLES: Record<TabId, string> = {
 };
 
 function AppShell() {
-  const [tab, setTab] = useState<TabId>('home');
+  const [tab, setTab] = useState<TabId>('map');
 
   useDeviceSync();
   useBadWindAlerts();
@@ -43,6 +45,7 @@ function AppShell() {
       <StatusBar style="light" />
       <TopBar title={TITLES[tab]} />
       <View style={styles.screen}>
+        {tab === 'map' && <MapScreen />}
         {tab === 'home' && <HomeScreen />}
         {tab === 'stand' && <StandScreen />}
         {tab === 'alerts' && <AlertsScreen />}

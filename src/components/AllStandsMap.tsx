@@ -6,11 +6,28 @@ import type { Region } from 'react-native-maps';
 import { loadMaps } from '../services/maps/loadMaps';
 import { darkMapStyle } from '../theme/mapStyle';
 import { palette } from '../theme/palette';
-import type { Stand } from '../types';
+import type { Stand, WindReading } from '../types';
+import { isWindUnfavorable, windTravelDirection } from '../utils/compass';
+import { destinationPoint } from '../utils/geo';
+import { gameAreaBearingDeg } from '../utils/gameArea';
 
 const DEFAULT_REGION: Region = { latitude: 39.8283, longitude: -98.5795, latitudeDelta: 20, longitudeDelta: 20 };
 const MIN_DELTA = 0.05;
 const BOUNDS_PADDING_FACTOR = 1.6;
+
+// Matches CompassDial's wind cone geometry (same half-angle), projected onto real ground
+// distance instead of a fixed-size SVG so it reads sensibly at any map zoom level.
+const CONE_HALF_ANGLE_DEG = 16;
+const CONE_DISTANCE_M = 300;
+
+function scentConePolygon(pin: { latitude: number; longitude: number }, windDirectionDeg: number) {
+  const goingDir = windTravelDirection(windDirectionDeg);
+  return [
+    pin,
+    destinationPoint(pin, goingDir - CONE_HALF_ANGLE_DEG, CONE_DISTANCE_M),
+    destinationPoint(pin, goingDir + CONE_HALF_ANGLE_DEG, CONE_DISTANCE_M),
+  ];
+}
 
 export type LocatedStand = Stand & { latitude: number; longitude: number };
 
@@ -50,6 +67,16 @@ interface AllStandsMapViewProps {
    * Home screen's compact background layer starts tightly zoomed on just the active
    * stand, then the caller animates it out to `regionForStands` via the ref on expand. */
   initialRegion?: Region;
+  /** Shows the OS-provided "you are here" dot (requires location permission to already be
+   * granted — the caller is responsible for requesting it). Off by default so existing
+   * callers (Stand tab's map, Home's background layer) are unaffected. */
+  showsUserLocation?: boolean;
+  /** When provided, every pin also gets an always-visible name label and a scent-cone
+   * wedge shaded green/red by whether the wind reading this resolver returns for that
+   * stand is currently favorable — same cone geometry and color logic as CompassDial, just
+   * projected onto the map instead of drawn in a fixed-size SVG. Omitted by callers that
+   * just want plain pins, so this stays additive rather than a second map implementation. */
+  resolveStandWind?: (stand: LocatedStand) => WindReading | null;
 }
 
 /** Bare map + stand pins, filling its parent — no border, no height prop, no "requires a
@@ -59,13 +86,13 @@ interface AllStandsMapViewProps {
  * this is the one real map-rendering implementation both share. Forwards the underlying
  * `react-native-maps` ref so a caller can call `animateToRegion` for a smooth pan/zoom. */
 export const AllStandsMapView = forwardRef<MapViewType, AllStandsMapViewProps>(function AllStandsMapView(
-  { stands, activeStandId, onSelectStand, initialRegion },
+  { stands, activeStandId, onSelectStand, initialRegion, showsUserLocation, resolveStandWind },
   ref,
 ) {
   const maps = loadMaps();
   if (!maps) return null;
 
-  const { MapView, Marker, PROVIDER_GOOGLE } = maps;
+  const { MapView, Marker, Polygon, PROVIDER_GOOGLE } = maps;
   const located = stands.filter(isLocated);
 
   return (
@@ -75,7 +102,26 @@ export const AllStandsMapView = forwardRef<MapViewType, AllStandsMapViewProps>(f
       provider={PROVIDER_GOOGLE}
       initialRegion={initialRegion ?? regionForStands(located)}
       customMapStyle={darkMapStyle}
+      showsUserLocation={showsUserLocation}
     >
+      {resolveStandWind &&
+        located.map((stand) => {
+          const wind = resolveStandWind(stand);
+          if (!wind) return null;
+          const gameBearingDeg = gameAreaBearingDeg(stand);
+          const isBad = isWindUnfavorable(wind.directionDeg, gameBearingDeg);
+          const coneColor = isBad ? palette.bad : palette.good;
+          return (
+            <Polygon
+              key={`cone-${stand.id}`}
+              coordinates={scentConePolygon(stand, wind.directionDeg)}
+              fillColor={`${coneColor}55`}
+              strokeColor={coneColor}
+              strokeWidth={1.5}
+            />
+          );
+        })}
+
       {located.map((stand) => (
         <Marker
           key={stand.id}
@@ -84,7 +130,25 @@ export const AllStandsMapView = forwardRef<MapViewType, AllStandsMapViewProps>(f
           description={`${stand.terrain}${stand.isEdge ? ' · Edge' : ''}`}
           pinColor={stand.id === activeStandId ? palette.amber : palette.gameDir}
           onPress={() => onSelectStand(stand.id)}
-        />
+          anchor={resolveStandWind ? { x: 0.5, y: 1 } : undefined}
+          tracksViewChanges={false}
+        >
+          {resolveStandWind && (
+            <View style={styles.markerWrap}>
+              <View style={styles.nameLabel}>
+                <Text style={styles.nameLabelText} numberOfLines={1}>
+                  {stand.name}
+                </Text>
+              </View>
+              <View
+                style={[
+                  styles.pinDot,
+                  { backgroundColor: stand.id === activeStandId ? palette.amber : palette.gameDir },
+                ]}
+              />
+            </View>
+          )}
+        </Marker>
       ))}
     </MapView>
   );
@@ -132,6 +196,25 @@ export function AllStandsMap({ stands, activeStandId, onSelectStand, height = 36
 }
 
 const styles = StyleSheet.create({
+  markerWrap: { alignItems: 'center' },
+  nameLabel: {
+    maxWidth: 140,
+    marginBottom: 3,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    backgroundColor: 'rgba(20,23,15,0.85)',
+    borderWidth: 1,
+    borderColor: palette.line,
+  },
+  nameLabelText: { color: palette.textHi, fontSize: 10, fontWeight: '600' },
+  pinDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: palette.textHi,
+  },
   mapBox: { borderRadius: 8, overflow: 'hidden', borderWidth: 1, borderColor: palette.line },
   hint: { color: palette.textLo, fontSize: 11, marginTop: 8 },
   fallback: {

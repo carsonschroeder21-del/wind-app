@@ -1,4 +1,4 @@
-export type TabId = 'home' | 'stand' | 'alerts' | 'device' | 'log';
+export type TabId = 'map' | 'home' | 'stand' | 'alerts' | 'device' | 'log';
 
 export const TERRAIN_TYPES = ['Timber', 'Field', 'Water', 'Ridge', 'Creek Bottom'] as const;
 export type Terrain = (typeof TERRAIN_TYPES)[number];

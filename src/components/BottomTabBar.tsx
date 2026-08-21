@@ -1,4 +1,4 @@
-import { Bell, Bluetooth, History, MapPin, Wind } from 'lucide-react-native';
+import { Bell, Bluetooth, History, Map, MapPin, Wind } from 'lucide-react-native';
 import type { LucideIcon } from 'lucide-react-native';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
@@ -7,6 +7,7 @@ import { mono } from '../theme/typography';
 import type { TabId } from '../types';
 
 const TABS: { id: TabId; icon: LucideIcon; label: string }[] = [
+  { id: 'map', icon: Map, label: 'Map' },
   { id: 'home', icon: Wind, label: 'Wind' },
   { id: 'stand', icon: MapPin, label: 'Stand' },
   { id: 'alerts', icon: Bell, label: 'Alerts' },

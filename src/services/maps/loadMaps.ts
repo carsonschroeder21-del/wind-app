@@ -1,11 +1,12 @@
 import type RNMapView from 'react-native-maps';
-import type { Marker as RNMarker } from 'react-native-maps';
+import type { Marker as RNMarker, Polygon as RNPolygon } from 'react-native-maps';
 
 import { isNativeMapsAvailable } from './availability';
 
 export interface MapsModule {
   MapView: typeof RNMapView;
   Marker: typeof RNMarker;
+  Polygon: typeof RNPolygon;
   PROVIDER_GOOGLE: 'google';
 }
 
@@ -28,6 +29,7 @@ export function loadMaps(): MapsModule | null {
     cached = {
       MapView: mod.default,
       Marker: mod.Marker,
+      Polygon: mod.Polygon,
       PROVIDER_GOOGLE: mod.PROVIDER_GOOGLE,
     };
   } catch (err) {

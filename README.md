@@ -134,6 +134,31 @@ eas secret:create --scope project --name EXPO_PUBLIC_SUPABASE_URL --value <your 
 eas secret:create --scope project --name EXPO_PUBLIC_SUPABASE_ANON_KEY --value <your anon key> --type string
 ```
 
+### Map tab (default screen)
+
+The Map tab (`MapScreen.tsx`) is the app's first/default screen — it opens fit to every
+saved stand pin (`AllStandsMapView`'s default region), then requests location permission
+so the OS "you are here" dot can show. Every pin gets an always-visible name label and a
+scent-cone wedge (green/red, same geometry and favorability logic as the compass dial's
+wind cone) shaded by that stand's own wind: each stand's nearest-to-now Open-Meteo forecast
+point (fetched from its own coordinates) counts as its "local" reading, falling back to the
+single shared live/regional reading only when a stand has no saved location yet
+(`resolveMapPinWind` in `utils/mapPinWind.ts`, cone geometry added to `AllStandsMapView` in
+`AllStandsMap.tsx` behind an opt-in `resolveStandWind` prop so the Stand tab's map and the
+Home screen's background layer are unaffected). A collapsible "Your Stands" panel pinned
+near the top (`StandsDropdown.tsx`) lists every stand with the same wind snapshot. Tapping
+a pin or a dropdown row sets that stand active and slides up `StandDetailScreen` — the same
+full wind/thermal/entry-risk detail view the Stand tab uses — in a modal, rather than
+building a second detail view.
+
+The bottom tab bar now opens on Map first, with Wind (the old Home screen) moved to second.
+
+**Untested in this environment:** same caveat as the Home screen map layer below — this
+typechecks and bundles cleanly but hasn't been run on a device (no dev-client/simulator
+available in this sandbox). Worth checking on a real build: the location-permission prompt
+timing, marker label legibility over satellite/terrain imagery, and cone rendering
+performance with a larger number of saved stands.
+
 ### Home screen map layer
 
 The Home screen shows the map as a background layer behind the compass dial (tightly
