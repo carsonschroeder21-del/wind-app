@@ -26,6 +26,11 @@ module.exports = {
       supportsTablet: true,
       infoPlist: {
         UIBackgroundModes: ['bluetooth-central'],
+        // Only standard HTTPS/TLS (Supabase, Open-Meteo, Google Maps tiles) — no
+        // proprietary/non-exempt encryption — so this is exempt from export compliance.
+        // Declaring it here answers Apple's "Export Compliance" question at submit time
+        // automatically instead of EAS Submit prompting for it on every build.
+        ITSAppUsesNonExemptEncryption: false,
       },
     },
     android: {
