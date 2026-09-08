@@ -38,17 +38,12 @@ export function MapTypeToggle({ value, onChange }: MapTypeToggleProps) {
 
 const styles = StyleSheet.create({
   container: {
-    position: 'absolute',
-    right: 12,
-    bottom: 16,
     flexDirection: 'row',
     borderRadius: 8,
     backgroundColor: 'rgba(28,32,21,0.94)',
     borderWidth: 1,
     borderColor: palette.line,
     overflow: 'hidden',
-    zIndex: 20,
-    elevation: 20,
   },
   segment: { paddingHorizontal: 10, paddingVertical: 8 },
   segmentActive: { backgroundColor: palette.amber },

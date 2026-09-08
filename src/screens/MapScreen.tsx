@@ -1,14 +1,17 @@
 import * as Location from 'expo-location';
-import { useEffect, useMemo, useState } from 'react';
-import { Modal, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Alert, Modal, StyleSheet, Text, View } from 'react-native';
+import type MapViewType from 'react-native-maps';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AllStandsMapView, isLocated } from '../components/AllStandsMap';
 import type { LocatedStand, MapType } from '../components/AllStandsMap';
 import { MapTypeToggle } from '../components/MapTypeToggle';
+import { RecenterButton } from '../components/RecenterButton';
 import { StandsDropdown } from '../components/StandsDropdown';
 import type { StandWindSnapshot } from '../components/StandsDropdown';
 import { useStandWeatherSeries } from '../hooks/useStandWeatherSeries';
+import { getCurrentLocation } from '../services/location';
 import { loadMaps } from '../services/maps/loadMaps';
 import { StandDetailScreen } from './StandDetailScreen';
 import { useAppStore } from '../state/store';
@@ -16,6 +19,9 @@ import { palette } from '../theme/palette';
 import { isWindUnfavorable } from '../utils/compass';
 import { gameAreaBearingDeg } from '../utils/gameArea';
 import { resolveMapPinWind } from '../utils/mapPinWind';
+
+const RECENTER_ZOOM_DELTA = 0.01;
+const RECENTER_ANIM_MS = 400;
 
 export function MapScreen() {
   const stands = useAppStore((s) => s.stands);
@@ -25,6 +31,8 @@ export function MapScreen() {
 
   const [sheetStandId, setSheetStandId] = useState<string | null>(null);
   const [mapType, setMapType] = useState<MapType>('standard');
+  const [recentering, setRecentering] = useState(false);
+  const mapRef = useRef<MapViewType>(null);
   const located = useMemo(() => stands.filter(isLocated), [stands]);
   const seriesByStandId = useStandWeatherSeries(located);
 
@@ -52,6 +60,34 @@ export function MapScreen() {
     setSheetStandId(id);
   };
 
+  const handleRecenter = async () => {
+    setRecentering(true);
+    // Reuses the same permission request the initial map-fit flow already made — this only
+    // re-prompts if the hunter denied it then, otherwise it's an instant cached grant.
+    const result = await getCurrentLocation();
+    setRecentering(false);
+
+    if (!result.ok) {
+      Alert.alert(
+        'Location unavailable',
+        result.reason === 'permission-denied'
+          ? 'Location permission denied — enable it in Settings to recenter the map.'
+          : "Couldn't get your location. Try again.",
+      );
+      return;
+    }
+
+    mapRef.current?.animateToRegion(
+      {
+        latitude: result.location.latitude,
+        longitude: result.location.longitude,
+        latitudeDelta: RECENTER_ZOOM_DELTA,
+        longitudeDelta: RECENTER_ZOOM_DELTA,
+      },
+      RECENTER_ANIM_MS,
+    );
+  };
+
   const maps = loadMaps();
 
   return (
@@ -59,6 +95,7 @@ export function MapScreen() {
       {maps ? (
         <>
           <AllStandsMapView
+            ref={mapRef}
             stands={stands}
             activeStandId={activeStandId}
             onSelectStand={handleSelectStand}
@@ -66,7 +103,10 @@ export function MapScreen() {
             mapType={mapType}
             resolveStandWind={resolveStandWind}
           />
-          <MapTypeToggle value={mapType} onChange={setMapType} />
+          <View style={styles.floatingControls}>
+            <RecenterButton onPress={handleRecenter} busy={recentering} />
+            <MapTypeToggle value={mapType} onChange={setMapType} />
+          </View>
         </>
       ) : (
         <View style={styles.fallback}>
@@ -95,6 +135,15 @@ export function MapScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  floatingControls: {
+    position: 'absolute',
+    right: 12,
+    bottom: 16,
+    alignItems: 'flex-end',
+    gap: 10,
+    zIndex: 20,
+    elevation: 20,
+  },
   sheet: { flex: 1, backgroundColor: palette.bg },
   fallback: {
     flex: 1,
