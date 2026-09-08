@@ -1,7 +1,7 @@
 import { forwardRef } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import type MapViewType from 'react-native-maps';
-import type { Region } from 'react-native-maps';
+import type { MapType, Region } from 'react-native-maps';
 
 import { loadMaps } from '../services/maps/loadMaps';
 import { darkMapStyle } from '../theme/mapStyle';
@@ -29,6 +29,7 @@ function scentConePolygon(pin: { latitude: number; longitude: number }, windDire
   ];
 }
 
+export type { MapType };
 export type LocatedStand = Stand & { latitude: number; longitude: number };
 
 export function isLocated(stand: Stand): stand is LocatedStand {
@@ -71,6 +72,9 @@ interface AllStandsMapViewProps {
    * granted — the caller is responsible for requesting it). Off by default so existing
    * callers (Stand tab's map, Home's background layer) are unaffected. */
   showsUserLocation?: boolean;
+  /** Basemap type — 'standard', 'satellite', or 'hybrid' (satellite + road/place labels).
+   * Defaults to whatever react-native-maps itself defaults to ('standard') when omitted. */
+  mapType?: MapType;
   /** When provided, every pin also gets an always-visible name label and a scent-cone
    * wedge shaded green/red by whether the wind reading this resolver returns for that
    * stand is currently favorable — same cone geometry and color logic as CompassDial, just
@@ -86,7 +90,7 @@ interface AllStandsMapViewProps {
  * this is the one real map-rendering implementation both share. Forwards the underlying
  * `react-native-maps` ref so a caller can call `animateToRegion` for a smooth pan/zoom. */
 export const AllStandsMapView = forwardRef<MapViewType, AllStandsMapViewProps>(function AllStandsMapView(
-  { stands, activeStandId, onSelectStand, initialRegion, showsUserLocation, resolveStandWind },
+  { stands, activeStandId, onSelectStand, initialRegion, showsUserLocation, mapType, resolveStandWind },
   ref,
 ) {
   const maps = loadMaps();
@@ -103,6 +107,7 @@ export const AllStandsMapView = forwardRef<MapViewType, AllStandsMapViewProps>(f
       initialRegion={initialRegion ?? regionForStands(located)}
       customMapStyle={darkMapStyle}
       showsUserLocation={showsUserLocation}
+      mapType={mapType}
     >
       {resolveStandWind &&
         located.map((stand) => {

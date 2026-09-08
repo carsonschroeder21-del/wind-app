@@ -4,7 +4,8 @@ import { Modal, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AllStandsMapView, isLocated } from '../components/AllStandsMap';
-import type { LocatedStand } from '../components/AllStandsMap';
+import type { LocatedStand, MapType } from '../components/AllStandsMap';
+import { MapTypeToggle } from '../components/MapTypeToggle';
 import { StandsDropdown } from '../components/StandsDropdown';
 import type { StandWindSnapshot } from '../components/StandsDropdown';
 import { useStandWeatherSeries } from '../hooks/useStandWeatherSeries';
@@ -23,6 +24,7 @@ export function MapScreen() {
   const wind = useAppStore((s) => s.wind);
 
   const [sheetStandId, setSheetStandId] = useState<string | null>(null);
+  const [mapType, setMapType] = useState<MapType>('standard');
   const located = useMemo(() => stands.filter(isLocated), [stands]);
   const seriesByStandId = useStandWeatherSeries(located);
 
@@ -55,13 +57,17 @@ export function MapScreen() {
   return (
     <View style={styles.container}>
       {maps ? (
-        <AllStandsMapView
-          stands={stands}
-          activeStandId={activeStandId}
-          onSelectStand={handleSelectStand}
-          showsUserLocation
-          resolveStandWind={resolveStandWind}
-        />
+        <>
+          <AllStandsMapView
+            stands={stands}
+            activeStandId={activeStandId}
+            onSelectStand={handleSelectStand}
+            showsUserLocation
+            mapType={mapType}
+            resolveStandWind={resolveStandWind}
+          />
+          <MapTypeToggle value={mapType} onChange={setMapType} />
+        </>
       ) : (
         <View style={styles.fallback}>
           <Text style={styles.fallbackText}>
