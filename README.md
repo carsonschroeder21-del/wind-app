@@ -144,8 +144,8 @@ wind cone) shaded by that stand's own wind: each stand's nearest-to-now Open-Met
 point (fetched from its own coordinates) counts as its "local" reading, falling back to the
 single shared live/regional reading only when a stand has no saved location yet
 (`resolveMapPinWind` in `utils/mapPinWind.ts`, cone geometry added to `AllStandsMapView` in
-`AllStandsMap.tsx` behind an opt-in `resolveStandWind` prop so the Stand tab's map and the
-Home screen's background layer are unaffected). A collapsible "Your Stands" panel pinned
+`AllStandsMap.tsx` behind an opt-in `resolveStandWind` prop so the Stand tab's map is
+unaffected). A collapsible "Your Stands" panel pinned
 near the top (`StandsDropdown.tsx`) lists every stand with the same wind snapshot. Tapping
 a pin or a dropdown row sets that stand active and slides up `StandDetailScreen` — the same
 full wind/thermal/entry-risk detail view the Stand tab uses — in a modal, rather than
@@ -159,26 +159,12 @@ available in this sandbox). Worth checking on a real build: the location-permiss
 timing, marker label legibility over satellite/terrain imagery, and cone rendering
 performance with a larger number of saved stands.
 
-### Home screen map layer
-
-The Home screen shows the map as a background layer behind the compass dial (tightly
-zoomed on the active stand, dial/banner over a dark scrim) — tap it to expand into the
-same all-stands view `AllStandsMapView` shows on the Stand tab's Map segment, animating
-the card's size and the map's own region together; collapse back via the header's button
-or an interactive swipe-down on its grabber handle (`HomeMapReveal.tsx`).
-
-This inherits `react-native-maps`' dev-client-only requirement (see "Google Maps setup"
-above) — in Expo Go or on web, the Home screen falls back to exactly its old plain
-scrollable layout (`HomeScreen.tsx` checks `loadMaps() != null` before rendering the map
-card at all), so there's no dead card or broken tap target where the map can't run.
-
-**Untested in this environment:** the size/opacity animation, the region pan/zoom, and
-the swipe-down gesture were all written against the installed package's actual type
-definitions and API signatures (checked directly in `node_modules`, since network access
-to the Expo docs was blocked here) and the whole app typechecks and bundles cleanly, but
-none of it has been run interactively — that needs a dev-client build on a real device or
-simulator, which this sandboxed session can't produce. Sanity-check the feel (timing,
-commit threshold, grabber hit area) on an actual build before relying on it.
+The Home (Wind) screen itself is a plain scrollable layout — compass dial, mph/direction,
+wind-favorability banner, thermal/pressure indicators, stand recommendations — with no map
+on it. It previously had a map-behind-the-dial background layer (`HomeMapReveal.tsx`) that
+expanded into the Stand tab's map view on tap; that was removed once the Map tab above
+became a dedicated, fully-built-out screen, making the duplicate entry point on Home
+redundant.
 
 ## Architecture
 
@@ -204,9 +190,7 @@ src/
     AllStandsMap.tsx         Every saved stand as a pin, tap one to open its editor.
                              Also exports AllStandsMapView (bare map + pins, ref-forwarded)
                              and regionForStands() — the real map-rendering + bounds-fit
-                             logic both this and HomeMapReveal share
-    HomeMapReveal.tsx         Home screen's collapsed-card/full-screen map layer — see
-                             "Home screen map layer" below
+                             logic the Map tab and Stand tab both share
     StandRecommendation.tsx  Ranked stand list (src/utils/recommendation.ts) with
                              one-tap "switch active stand"
     ThermalLogModal.tsx      Rising/sinking/unsure prompt for predicted-vs-observed
