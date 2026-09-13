@@ -1,4 +1,4 @@
-import { Check, ChevronLeft } from 'lucide-react-native';
+import { Check, ChevronLeft, Pencil } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useVideoPlayer, VideoView } from 'expo-video';
@@ -50,9 +50,13 @@ const MAX_OFFSET_MINUTES = 48 * 60;
 interface StandDetailScreenProps {
   standId: string;
   onBack: () => void;
+  /** Shown as a header edit button when provided — the Map screen's bottom sheet passes
+   * this to open StandEditor over the same stand; the Stand tab's own list already has
+   * its own pencil-icon edit affordance, so it leaves this unset. */
+  onEdit?: () => void;
 }
 
-export function StandDetailScreen({ standId, onBack }: StandDetailScreenProps) {
+export function StandDetailScreen({ standId, onBack, onEdit }: StandDetailScreenProps) {
   const stand = useAppStore((s) => s.stands.find((st) => st.id === standId) ?? null);
   const activeStandId = useAppStore((s) => s.activeStandId);
   const setActiveStandId = useAppStore((s) => s.setActiveStandId);
@@ -142,12 +146,19 @@ export function StandDetailScreen({ standId, onBack }: StandDetailScreenProps) {
           <ChevronLeft size={20} color={palette.textHi} />
           <Text style={styles.backText}>Stands</Text>
         </Pressable>
-        {!isActive && (
-          <Pressable onPress={() => setActiveStandId(stand.id)} style={styles.activeButton}>
-            <Check size={13} color={palette.onAmber} />
-            <Text style={styles.activeButtonText}>Set Active</Text>
-          </Pressable>
-        )}
+        <View style={styles.headerRight}>
+          {onEdit && (
+            <Pressable onPress={onEdit} hitSlop={8} style={styles.editButton}>
+              <Pencil size={16} color={palette.textHi} />
+            </Pressable>
+          )}
+          {!isActive && (
+            <Pressable onPress={() => setActiveStandId(stand.id)} style={styles.activeButton}>
+              <Check size={13} color={palette.onAmber} />
+              <Text style={styles.activeButtonText}>Set Active</Text>
+            </Pressable>
+          )}
+        </View>
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll}>
@@ -250,6 +261,8 @@ const styles = StyleSheet.create({
   headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
   backButton: { flexDirection: 'row', alignItems: 'center' },
   backText: { color: palette.textHi, fontSize: 14, marginLeft: 2 },
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  editButton: { padding: 2 },
   activeButton: {
     flexDirection: 'row',
     alignItems: 'center',

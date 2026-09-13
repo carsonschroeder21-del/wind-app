@@ -70,11 +70,18 @@ export interface StandMedia {
   createdAt: number;
 }
 
+export const STAND_TYPES = ['Open Stand', 'Ladder Stand', 'Box/House Blind'] as const;
+export type StandType = (typeof STAND_TYPES)[number];
+
 export interface Stand {
   id: string;
   name: string;
   terrain: Terrain;
   isEdge: boolean;
+  /** Structural type shown as the pin's icon on the Map screen. Null for stands saved
+   * before this field existed — treated as 'Open Stand' wherever a concrete type is
+   * needed for display. */
+  standType: StandType | null;
   /** Direction the hunter expects game to come from, in degrees. */
   facingDeg: number;
   latitude: number | null;
@@ -93,6 +100,21 @@ export interface Stand {
   parkingLongitude: number | null;
   createdAt: number;
   updatedAt: number;
+}
+
+export const GAME_SPECIES = ['Deer', 'Turkey', 'Duck', 'Goose', 'Coyote', 'Dove'] as const;
+export type GameSpecies = (typeof GAME_SPECIES)[number];
+
+/** A quick "saw sign here" map pin, dropped via the Map screen's long-press menu.
+ * Deliberately minimal and kept separate from HuntLogEntry/ThermalLogEntry — no wind,
+ * thermal, or stand tie-in — since this is for logging a sighting anywhere on the map in
+ * one tap, not a structured post-hunt record. */
+export interface GameSightingPin {
+  id: string;
+  latitude: number;
+  longitude: number;
+  species: GameSpecies;
+  timestamp: number;
 }
 
 export type EntryRiskLevel = 'low' | 'moderate' | 'high';

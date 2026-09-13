@@ -1,6 +1,6 @@
 import Slider from '@react-native-community/slider';
 import { Camera, Check, LocateFixed, Trash2 } from 'lucide-react-native';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import type { LatLng } from 'react-native-maps';
 
@@ -10,10 +10,11 @@ import { deleteStandMediaFile, pickStandMedia } from '../services/media/standMed
 import { useAppStore } from '../state/store';
 import { palette } from '../theme/palette';
 import { mono } from '../theme/typography';
-import { GAME_AREA_RELATIVE_ELEVATIONS, TERRAIN_TYPES } from '../types';
-import type { GameAreaRelativeElevation, Stand, StandMedia, Terrain } from '../types';
+import { GAME_AREA_RELATIVE_ELEVATIONS, STAND_TYPES, TERRAIN_TYPES } from '../types';
+import type { GameAreaRelativeElevation, Stand, StandMedia, StandType, Terrain } from '../types';
 import { toCompass } from '../utils/compass';
 import { genId } from '../utils/id';
+import { standTypeStyle } from '../utils/pinCategories';
 import { StandMapPicker } from './StandMapPicker';
 import { ToggleSwitch } from './ToggleSwitch';
 
@@ -27,9 +28,21 @@ interface StandEditorProps {
   /** null when creating a new stand. */
   standId: string | null;
   onDone: () => void;
+  /** Prefills a new stand's location from the Map screen's long-press pin drop, so it
+   * lands exactly where the hunter pressed instead of starting blank. Ignored when
+   * editing an existing stand. */
+  initialLocation?: LatLng | null;
+  /** Prefills a new stand's type from the long-press category picker. Ignored when
+   * editing an existing stand. */
+  initialStandType?: StandType | null;
 }
 
-export function StandEditor({ standId: standIdProp, onDone }: StandEditorProps) {
+export function StandEditor({
+  standId: standIdProp,
+  onDone,
+  initialLocation = null,
+  initialStandType = null,
+}: StandEditorProps) {
   const existing = useAppStore((s) => s.stands.find((st) => st.id === standIdProp) ?? null);
   const activeStand = useAppStore((s) => s.stands.find((st) => st.id === s.activeStandId) ?? null);
   const addStand = useAppStore((s) => s.addStand);
@@ -44,10 +57,11 @@ export function StandEditor({ standId: standIdProp, onDone }: StandEditorProps) 
 
   const [name, setName] = useState(existing?.name ?? '');
   const [terrain, setTerrain] = useState<Terrain>(existing?.terrain ?? 'Timber');
+  const [standType, setStandType] = useState<StandType>(existing?.standType ?? initialStandType ?? 'Open Stand');
   const [isEdge, setIsEdge] = useState(existing?.isEdge ?? false);
   const [facingDeg, setFacingDeg] = useState(existing?.facingDeg ?? activeStand?.facingDeg ?? 0);
-  const [latitude, setLatitude] = useState<number | null>(existing?.latitude ?? null);
-  const [longitude, setLongitude] = useState<number | null>(existing?.longitude ?? null);
+  const [latitude, setLatitude] = useState<number | null>(existing?.latitude ?? initialLocation?.latitude ?? null);
+  const [longitude, setLongitude] = useState<number | null>(existing?.longitude ?? initialLocation?.longitude ?? null);
   const [gameAreaLatitude, setGameAreaLatitude] = useState<number | null>(existing?.gameAreaLatitude ?? null);
   const [gameAreaLongitude, setGameAreaLongitude] = useState<number | null>(existing?.gameAreaLongitude ?? null);
   const [parkingLatitude, setParkingLatitude] = useState<number | null>(existing?.parkingLatitude ?? null);
@@ -106,6 +120,20 @@ export function StandEditor({ standId: standIdProp, onDone }: StandEditorProps) 
     setElevationFt(ft);
   };
 
+  useEffect(() => {
+    // Only for a brand-new stand prefilled from the Map screen's long-press pin drop —
+    // the coordinate itself is already set from initial state above, this just runs the
+    // same elevation lookup every other way of setting a location gets.
+    if (!existing && initialLocation) {
+      setElevationLoading(true);
+      fetchElevationFt(initialLocation.latitude, initialLocation.longitude).then((ft) => {
+        setElevationLoading(false);
+        setElevationFt(ft);
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const handleGameAreaLocationChange = (coords: LatLng) => {
     setGameAreaLatitude(coords.latitude);
     setGameAreaLongitude(coords.longitude);
@@ -157,6 +185,7 @@ export function StandEditor({ standId: standIdProp, onDone }: StandEditorProps) 
     const payload: Omit<Stand, 'id' | 'createdAt' | 'updatedAt'> = {
       name: trimmedName,
       terrain,
+      standType,
       isEdge,
       facingDeg,
       latitude,
@@ -218,6 +247,29 @@ export function StandEditor({ standId: standIdProp, onDone }: StandEditorProps) 
         style={[styles.input, nameError && styles.inputError]}
       />
       {nameError && <Text style={styles.errorText}>Give this stand a name to save it.</Text>}
+
+      <Text style={styles.sectionLabel}>STAND TYPE</Text>
+      <View style={styles.terrainRow}>
+        {STAND_TYPES.map((t) => {
+          const active = standType === t;
+          const style = standTypeStyle(t);
+          const Icon = style.icon;
+          return (
+            <Pressable
+              key={t}
+              onPress={() => setStandType(t)}
+              style={[
+                styles.terrainChip,
+                styles.standTypeChip,
+                { backgroundColor: active ? palette.amber : palette.panel, borderColor: active ? palette.amber : palette.line },
+              ]}
+            >
+              <Icon size={13} color={active ? palette.onAmber : palette.textLo} />
+              <Text style={[styles.terrainChipText, { color: active ? palette.onAmber : palette.textLo }]}>{t}</Text>
+            </Pressable>
+          );
+        })}
+      </View>
 
       <Text style={styles.sectionLabel}>TERRAIN TYPE</Text>
       <View style={styles.terrainRow}>
@@ -434,6 +486,7 @@ const styles = StyleSheet.create({
   errorText: { color: palette.bad, fontSize: 11, marginTop: 6 },
   terrainRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   terrainChip: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, borderWidth: 1 },
+  standTypeChip: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   terrainChipText: { fontSize: 12 },
   edgeRow: {
     flexDirection: 'row',

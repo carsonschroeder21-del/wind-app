@@ -1,15 +1,16 @@
 import { forwardRef } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import type MapViewType from 'react-native-maps';
-import type { MapType, Region } from 'react-native-maps';
+import type { LatLng, LongPressEvent, MapType, Region } from 'react-native-maps';
 
 import { loadMaps } from '../services/maps/loadMaps';
 import { darkMapStyle } from '../theme/mapStyle';
 import { palette } from '../theme/palette';
-import type { Stand, WindReading } from '../types';
+import type { GameSightingPin, Stand, WindReading } from '../types';
 import { isWindUnfavorable, windTravelDirection } from '../utils/compass';
 import { destinationPoint } from '../utils/geo';
 import { gameAreaBearingDeg } from '../utils/gameArea';
+import { GAME_SPECIES_STYLE, standTypeStyle } from '../utils/pinCategories';
 
 const DEFAULT_REGION: Region = { latitude: 39.8283, longitude: -98.5795, latitudeDelta: 20, longitudeDelta: 20 };
 const MIN_DELTA = 0.05;
@@ -75,12 +76,21 @@ interface AllStandsMapViewProps {
   /** Basemap type — 'standard', 'satellite', or 'hybrid' (satellite + road/place labels).
    * Defaults to whatever react-native-maps itself defaults to ('standard') when omitted. */
   mapType?: MapType;
-  /** When provided, every pin also gets an always-visible name label and a scent-cone
-   * wedge shaded green/red by whether the wind reading this resolver returns for that
-   * stand is currently favorable — same cone geometry and color logic as CompassDial, just
+  /** When provided, every pin also gets an always-visible name label, a category-icon
+   * badge (by the stand's standType) instead of a plain dot, and a scent-cone wedge
+   * shaded green/red by whether the wind reading this resolver returns for that stand is
+   * currently favorable — same cone geometry and color logic as CompassDial, just
    * projected onto the map instead of drawn in a fixed-size SVG. Omitted by callers that
    * just want plain pins, so this stays additive rather than a second map implementation. */
   resolveStandWind?: (stand: LocatedStand) => WindReading | null;
+  /** Fires with the tapped-and-held coordinate — the Map screen's long-press pin-drop
+   * menu. Omitted by callers that don't support dropping pins (Stand tab's map, the
+   * editor's single-pin pickers). */
+  onLongPress?: (coordinate: LatLng) => void;
+  /** Game-sighting pins to render alongside the stand pins — only ever passed by the Map
+   * screen, which is the only place they're droppable/visible. */
+  sightingPins?: GameSightingPin[];
+  onSelectSighting?: (id: string) => void;
 }
 
 /** Bare map + stand pins, filling its parent — no border, no height prop, no "requires a
@@ -90,7 +100,18 @@ interface AllStandsMapViewProps {
  * this is the one real map-rendering implementation both share. Forwards the underlying
  * `react-native-maps` ref so a caller can call `animateToRegion` for a smooth pan/zoom. */
 export const AllStandsMapView = forwardRef<MapViewType, AllStandsMapViewProps>(function AllStandsMapView(
-  { stands, activeStandId, onSelectStand, initialRegion, showsUserLocation, mapType, resolveStandWind },
+  {
+    stands,
+    activeStandId,
+    onSelectStand,
+    initialRegion,
+    showsUserLocation,
+    mapType,
+    resolveStandWind,
+    onLongPress,
+    sightingPins,
+    onSelectSighting,
+  },
   ref,
 ) {
   const maps = loadMaps();
@@ -108,6 +129,7 @@ export const AllStandsMapView = forwardRef<MapViewType, AllStandsMapViewProps>(f
       customMapStyle={darkMapStyle}
       showsUserLocation={showsUserLocation}
       mapType={mapType}
+      onLongPress={onLongPress ? (e: LongPressEvent) => onLongPress(e.nativeEvent.coordinate) : undefined}
     >
       {resolveStandWind &&
         located.map((stand) => {
@@ -127,34 +149,62 @@ export const AllStandsMapView = forwardRef<MapViewType, AllStandsMapViewProps>(f
           );
         })}
 
-      {located.map((stand) => (
-        <Marker
-          key={stand.id}
-          coordinate={{ latitude: stand.latitude, longitude: stand.longitude }}
-          title={stand.name}
-          description={`${stand.terrain}${stand.isEdge ? ' · Edge' : ''}`}
-          pinColor={stand.id === activeStandId ? palette.amber : palette.gameDir}
-          onPress={() => onSelectStand(stand.id)}
-          anchor={resolveStandWind ? { x: 0.5, y: 1 } : undefined}
-          tracksViewChanges={false}
-        >
-          {resolveStandWind && (
-            <View style={styles.markerWrap}>
-              <View style={styles.nameLabel}>
-                <Text style={styles.nameLabelText} numberOfLines={1}>
-                  {stand.name}
-                </Text>
+      {located.map((stand) => {
+        const isActive = stand.id === activeStandId;
+        const style = standTypeStyle(stand.standType);
+        const Icon = style.icon;
+        return (
+          <Marker
+            key={stand.id}
+            coordinate={{ latitude: stand.latitude, longitude: stand.longitude }}
+            title={stand.name}
+            description={`${stand.terrain}${stand.isEdge ? ' · Edge' : ''}`}
+            pinColor={isActive ? palette.amber : palette.gameDir}
+            onPress={() => onSelectStand(stand.id)}
+            anchor={resolveStandWind ? { x: 0.5, y: 1 } : undefined}
+            tracksViewChanges={false}
+          >
+            {resolveStandWind && (
+              <View style={styles.markerWrap}>
+                <View style={styles.nameLabel}>
+                  <Text style={styles.nameLabelText} numberOfLines={1}>
+                    {stand.name}
+                  </Text>
+                </View>
+                <View
+                  style={[
+                    styles.pinBadge,
+                    { backgroundColor: style.color, borderColor: isActive ? palette.amber : palette.textHi },
+                  ]}
+                >
+                  <Icon size={14} color={palette.textHi} />
+                </View>
               </View>
-              <View
-                style={[
-                  styles.pinDot,
-                  { backgroundColor: stand.id === activeStandId ? palette.amber : palette.gameDir },
-                ]}
-              />
+            )}
+          </Marker>
+        );
+      })}
+
+      {sightingPins?.map((pin) => {
+        const style = GAME_SPECIES_STYLE[pin.species];
+        const Icon = style.icon;
+        return (
+          <Marker
+            key={pin.id}
+            coordinate={{ latitude: pin.latitude, longitude: pin.longitude }}
+            title={pin.species}
+            anchor={{ x: 0.5, y: 1 }}
+            tracksViewChanges={false}
+            onPress={() => onSelectSighting?.(pin.id)}
+          >
+            <View style={styles.markerWrap}>
+              <View style={[styles.pinBadge, { backgroundColor: style.color, borderColor: palette.textHi }]}>
+                <Icon size={14} color={palette.textHi} />
+              </View>
             </View>
-          )}
-        </Marker>
-      ))}
+          </Marker>
+        );
+      })}
     </MapView>
   );
 });
@@ -213,12 +263,13 @@ const styles = StyleSheet.create({
     borderColor: palette.line,
   },
   nameLabelText: { color: palette.textHi, fontSize: 10, fontWeight: '600' },
-  pinDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
+  pinBadge: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     borderWidth: 2,
-    borderColor: palette.textHi,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   mapBox: { borderRadius: 8, overflow: 'hidden', borderWidth: 1, borderColor: palette.line },
   hint: { color: palette.textLo, fontSize: 11, marginTop: 8 },

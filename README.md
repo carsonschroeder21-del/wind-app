@@ -152,12 +152,30 @@ full wind/thermal/entry-risk detail view the Stand tab uses — in a modal, rath
 building a second detail view.
 
 The bottom tab bar now opens on Map first, with Wind (the old Home screen) moved to second.
+A basemap toggle (`MapTypeToggle.tsx` — Standard/Satellite/Hybrid, via react-native-maps'
+own `mapType` prop) and a recenter-on-my-location button (`RecenterButton.tsx`) sit grouped
+together bottom-right (`AllStandsMapView`'s `mapType`/`showsUserLocation` passthrough props).
 
-**Untested in this environment:** same caveat as the Home screen map layer below — this
-typechecks and bundles cleanly but hasn't been run on a device (no dev-client/simulator
-available in this sandbox). Worth checking on a real build: the location-permission prompt
-timing, marker label legibility over satellite/terrain imagery, and cone rendering
-performance with a larger number of saved stands.
+**Long-press pin drop:** holding down anywhere on the map opens `PinCategoryPicker.tsx`, an
+action sheet of icon categories — three stand types (Open/Ladder/Box-House, each a distinct
+lucide icon + color) and six game-sign species (Deer/Turkey/Duck/Goose/Coyote/Dove; lucide
+has no species-specific glyphs, so the three bird species share one icon differentiated by
+color, same as onX's approach when an exact icon doesn't exist — see `utils/pinCategories.ts`
+for the full icon/color table). Picking a stand type opens `StandEditor` prefilled with the
+long-press coordinate and that type (`StandEditor`'s new `initialLocation`/`initialStandType`
+props) — same save flow as "Add Stand," just prefilled, and a `standType` field now lives on
+`Stand` itself (nullable, defaults to Open Stand for pre-existing stands) so every pin shows
+its real structure icon instead of a plain dot. Picking a species instead saves a minimal,
+standalone `GameSightingPin` (location + timestamp + species — deliberately not tied into
+HuntLogEntry/ThermalLogEntry) immediately, no extra form. Tapping any pin opens its detail —
+`StandDetailScreen` (now with an edit button wired to `StandEditor`) for stand pins,
+`SightingDetailSheet.tsx` (change species or delete) for sighting pins.
+
+**Untested in this environment:** this typechecks and bundles cleanly but hasn't been run on
+a device (no dev-client/simulator available in this sandbox). Worth checking on a real
+build: the location-permission prompt timing, marker label legibility over satellite/terrain
+imagery, long-press hit detection/timing feel, and pin rendering density with a lot of saved
+stands + sightings on screen at once.
 
 The Home (Wind) screen itself is a plain scrollable layout — compass dial, mph/direction,
 wind-favorability banner, thermal/pressure indicators, stand recommendations — with no map

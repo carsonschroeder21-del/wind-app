@@ -5,6 +5,7 @@ import { createJSONStorage, persist } from 'zustand/middleware';
 import type {
   AlertSensitivity,
   BraceletStatus,
+  GameSightingPin,
   HuntLogEntry,
   Stand,
   ThermalLogEntry,
@@ -62,6 +63,7 @@ function createDefaultStand(): Stand {
     name: 'My Stand',
     terrain: 'Timber',
     isEdge: false,
+    standType: 'Open Stand',
     facingDeg: 120,
     latitude: null,
     longitude: null,
@@ -162,6 +164,13 @@ interface AppState {
 
   windHistory: WindHistoryEntry[];
   recordWindHistory: (reading: WindReading, source: WindSource) => void;
+
+  // Map-screen sighting pins — see GameSightingPin's doc comment for why these are kept
+  // separate from huntLog/thermalLogs.
+  sightingPins: GameSightingPin[];
+  addSightingPin: (pin: GameSightingPin) => void;
+  updateSightingPin: (id: string, patch: Partial<Pick<GameSightingPin, 'species'>>) => void;
+  deleteSightingPin: (id: string) => void;
 }
 
 const WIND_HISTORY_MAX_AGE_MS = 96 * 60 * 60 * 1000;
@@ -264,6 +273,12 @@ export const useAppStore = create<AppState>()(
           const windHistory = [...s.windHistory, { ...reading, source }].filter((e) => e.updatedAt >= cutoff);
           return { windHistory };
         }),
+
+      sightingPins: [],
+      addSightingPin: (pin) => set((s) => ({ sightingPins: [pin, ...s.sightingPins] })),
+      updateSightingPin: (id, patch) =>
+        set((s) => ({ sightingPins: s.sightingPins.map((p) => (p.id === id ? { ...p, ...patch } : p)) })),
+      deleteSightingPin: (id) => set((s) => ({ sightingPins: s.sightingPins.filter((p) => p.id !== id) })),
     }),
     {
       name: 'wind-scout-storage',
@@ -291,6 +306,7 @@ export const useAppStore = create<AppState>()(
         huntLog: state.huntLog,
         thermalLogs: state.thermalLogs,
         windHistory: state.windHistory,
+        sightingPins: state.sightingPins,
       }),
       // v1 stored a single flat stand (standFacingDeg/terrain/isEdge) instead of a
       // stands[] list — no real users yet, so just reseed a default stand rather than
