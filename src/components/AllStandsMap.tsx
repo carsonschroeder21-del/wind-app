@@ -7,7 +7,7 @@ import { loadMaps } from '../services/maps/loadMaps';
 import { darkMapStyle } from '../theme/mapStyle';
 import { palette } from '../theme/palette';
 import type { GameSightingPin, Stand, StandType, WindReading } from '../types';
-import { isWindUnfavorable, windTravelDirection } from '../utils/compass';
+import { isWindUnfavorable, toCompass, windTravelDirection } from '../utils/compass';
 import { destinationPoint } from '../utils/geo';
 import { gameAreaBearingDeg } from '../utils/gameArea';
 import { GAME_SPECIES_STYLE, standTypeStyle } from '../utils/pinCategories';
@@ -77,12 +77,18 @@ interface AllStandsMapViewProps {
    * Defaults to whatever react-native-maps itself defaults to ('standard') when omitted. */
   mapType?: MapType;
   /** When provided, every pin also gets an always-visible name label, a category-icon
-   * badge (by the stand's standType) instead of a plain dot, and a scent-cone wedge
-   * shaded green/red by whether the wind reading this resolver returns for that stand is
-   * currently favorable — same cone geometry and color logic as CompassDial, just
-   * projected onto the map instead of drawn in a fixed-size SVG. Omitted by callers that
+   * badge (by the stand's standType) instead of a plain dot, and a small always-visible
+   * wind-direction label (e.g. "NW") colored by whether the wind this resolver returns for
+   * that stand is currently favorable — onX-style, no tap needed. Omitted by callers that
    * just want plain pins, so this stays additive rather than a second map implementation. */
   resolveStandWind?: (stand: LocatedStand) => WindReading | null;
+  /** The one stand currently "expanded" (tapped) — only this stand gets the full scent
+   * cone, drawn from `expandedWind` (which may reflect a time-slider offset rather than
+   * "now") rather than `resolveStandWind`'s always-on now-only reading. Null/omitted means
+   * no cone is drawn for anyone — same geometry/color logic as CompassDial's wind cone,
+   * just projected onto the map instead of drawn in a fixed-size SVG. */
+  expandedStandId?: string | null;
+  expandedWind?: WindReading | null;
   /** Fires with the tapped-and-held coordinate — the Map screen's long-press pin-drop
    * menu. Omitted by callers that don't support dropping pins (Stand tab's map, the
    * editor's single-pin pickers). */
@@ -116,6 +122,8 @@ export const AllStandsMapView = forwardRef<MapViewType, AllStandsMapViewProps>(f
     sightingPins,
     onSelectSighting,
     draftPin,
+    expandedStandId,
+    expandedWind,
   },
   ref,
 ) {
@@ -126,6 +134,7 @@ export const AllStandsMapView = forwardRef<MapViewType, AllStandsMapViewProps>(f
   const located = stands.filter(isLocated);
   const draftPinStyle = draftPin ? standTypeStyle(draftPin.standType) : null;
   const DraftIcon = draftPinStyle?.icon;
+  const expandedStand = expandedStandId ? located.find((s) => s.id === expandedStandId) : undefined;
 
   return (
     <MapView
@@ -138,28 +147,28 @@ export const AllStandsMapView = forwardRef<MapViewType, AllStandsMapViewProps>(f
       mapType={mapType}
       onLongPress={onLongPress ? (e: LongPressEvent) => onLongPress(e.nativeEvent.coordinate) : undefined}
     >
-      {resolveStandWind &&
-        located.map((stand) => {
-          const wind = resolveStandWind(stand);
-          if (!wind) return null;
-          const gameBearingDeg = gameAreaBearingDeg(stand);
-          const isBad = isWindUnfavorable(wind.directionDeg, gameBearingDeg);
+      {expandedStand &&
+        expandedWind &&
+        (() => {
+          const gameBearingDeg = gameAreaBearingDeg(expandedStand);
+          const isBad = isWindUnfavorable(expandedWind.directionDeg, gameBearingDeg);
           const coneColor = isBad ? palette.bad : palette.good;
           return (
             <Polygon
-              key={`cone-${stand.id}`}
-              coordinates={scentConePolygon(stand, wind.directionDeg)}
+              coordinates={scentConePolygon(expandedStand, expandedWind.directionDeg)}
               fillColor={`${coneColor}55`}
               strokeColor={coneColor}
               strokeWidth={1.5}
             />
           );
-        })}
+        })()}
 
       {located.map((stand) => {
         const isActive = stand.id === activeStandId;
         const style = standTypeStyle(stand.standType);
         const Icon = style.icon;
+        const nowWind = resolveStandWind?.(stand) ?? null;
+        const windIsBad = nowWind ? isWindUnfavorable(nowWind.directionDeg, gameAreaBearingDeg(stand)) : null;
         return (
           <Marker
             key={stand.id}
@@ -169,7 +178,6 @@ export const AllStandsMapView = forwardRef<MapViewType, AllStandsMapViewProps>(f
             pinColor={isActive ? palette.amber : palette.gameDir}
             onPress={() => onSelectStand(stand.id)}
             anchor={resolveStandWind ? { x: 0.5, y: 1 } : undefined}
-            tracksViewChanges={false}
           >
             {resolveStandWind && (
               <View style={styles.markerWrap}>
@@ -178,6 +186,18 @@ export const AllStandsMapView = forwardRef<MapViewType, AllStandsMapViewProps>(f
                     {stand.name}
                   </Text>
                 </View>
+                {nowWind && (
+                  <View
+                    style={[
+                      styles.windLabel,
+                      { borderColor: windIsBad ? palette.bad : palette.good },
+                    ]}
+                  >
+                    <Text style={[styles.windLabelText, { color: windIsBad ? palette.bad : palette.good }]}>
+                      {toCompass(nowWind.directionDeg)}
+                    </Text>
+                  </View>
+                )}
                 <View
                   style={[
                     styles.pinBadge,
@@ -201,7 +221,6 @@ export const AllStandsMapView = forwardRef<MapViewType, AllStandsMapViewProps>(f
             coordinate={{ latitude: pin.latitude, longitude: pin.longitude }}
             title={pin.species}
             anchor={{ x: 0.5, y: 1 }}
-            tracksViewChanges={false}
             onPress={() => onSelectSighting?.(pin.id)}
           >
             <View style={styles.markerWrap}>
@@ -214,11 +233,7 @@ export const AllStandsMapView = forwardRef<MapViewType, AllStandsMapViewProps>(f
       })}
 
       {draftPin && draftPinStyle && DraftIcon && (
-        <Marker
-          coordinate={{ latitude: draftPin.latitude, longitude: draftPin.longitude }}
-          anchor={{ x: 0.5, y: 1 }}
-          tracksViewChanges={false}
-        >
+        <Marker coordinate={{ latitude: draftPin.latitude, longitude: draftPin.longitude }} anchor={{ x: 0.5, y: 1 }}>
           <View style={styles.markerWrap}>
             <View style={[styles.pinBadge, { backgroundColor: draftPinStyle.color, borderColor: palette.amber }]}>
               <DraftIcon size={14} color={palette.textHi} />
@@ -284,6 +299,15 @@ const styles = StyleSheet.create({
     borderColor: palette.line,
   },
   nameLabelText: { color: palette.textHi, fontSize: 10, fontWeight: '600' },
+  windLabel: {
+    marginBottom: 3,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 4,
+    backgroundColor: 'rgba(20,23,15,0.85)',
+    borderWidth: 1,
+  },
+  windLabelText: { fontSize: 9, fontWeight: '700', letterSpacing: 0.5 },
   pinBadge: {
     width: 28,
     height: 28,

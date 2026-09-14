@@ -14,6 +14,7 @@ import type { DraftStandPin, QuickStandSaveInput } from '../components/QuickStan
 import { RecenterButton } from '../components/RecenterButton';
 import { SightingDetailSheet } from '../components/SightingDetailSheet';
 import { StandEditor } from '../components/StandEditor';
+import { StandQuickView } from '../components/StandQuickView';
 import { StandsDropdown } from '../components/StandsDropdown';
 import type { StandWindSnapshot } from '../components/StandsDropdown';
 import { useStandWeatherSeries } from '../hooks/useStandWeatherSeries';
@@ -23,11 +24,13 @@ import { StandDetailScreen } from './StandDetailScreen';
 import { useAppStore } from '../state/store';
 import { palette } from '../theme/palette';
 import { isWindUnfavorable } from '../utils/compass';
+import { resolveConditionsAtTime } from '../utils/conditionsAtTime';
 import { gameAreaBearingDeg } from '../utils/gameArea';
 import { genId } from '../utils/id';
 import { resolveMapPinWind } from '../utils/mapPinWind';
 import { GAME_SIGHTING_CATEGORIES } from '../utils/pinCategories';
 import type { PinCategory } from '../utils/pinCategories';
+import { assessTemperatureTrend } from '../utils/temperature';
 
 const RECENTER_ZOOM_DELTA = 0.01;
 const RECENTER_ANIM_MS = 400;
@@ -42,6 +45,8 @@ export function MapScreen() {
   const setActiveStandId = useAppStore((s) => s.setActiveStandId);
   const addStand = useAppStore((s) => s.addStand);
   const wind = useAppStore((s) => s.wind);
+  const windSensorConnected = useAppStore((s) => s.windSensor.state === 'connected');
+  const windHistory = useAppStore((s) => s.windHistory);
   const sightingPins = useAppStore((s) => s.sightingPins);
   const addSightingPin = useAppStore((s) => s.addSightingPin);
   const updateSightingPin = useAppStore((s) => s.updateSightingPin);
@@ -57,6 +62,11 @@ export function MapScreen() {
   // map right away with its real icon, at the exact long-press coordinate, before the
   // stand actually exists — QuickStandSheet turns it into a real saved Stand on Save.
   const [draftPin, setDraftPin] = useState<DraftStandPin | null>(null);
+  // The one stand whose scent cone + StandQuickView are showing — set by tapping its pin
+  // or its dropdown row, cleared by the panel's close button. offsetMinutes drives the
+  // time slider inside that panel and resets whenever a different stand is expanded.
+  const [expandedStandId, setExpandedStandId] = useState<string | null>(null);
+  const [offsetMinutes, setOffsetMinutes] = useState(0);
   const mapRef = useRef<MapViewType>(null);
   const located = useMemo(() => stands.filter(isLocated), [stands]);
   const seriesByStandId = useStandWeatherSeries(located);
@@ -83,7 +93,15 @@ export function MapScreen() {
 
   const handleSelectStand = (id: string) => {
     setActiveStandId(id);
-    setSheet({ kind: 'detail', standId: id });
+    setExpandedStandId(id);
+    setOffsetMinutes(0);
+  };
+
+  const handleCloseQuickView = () => setExpandedStandId(null);
+
+  const handleViewFullDetails = () => {
+    if (!expandedStandId) return;
+    setSheet({ kind: 'detail', standId: expandedStandId });
   };
 
   const handleRecenter = async () => {
@@ -189,6 +207,26 @@ export function MapScreen() {
   const maps = loadMaps();
   const selectedSighting = sightingPins.find((p) => p.id === selectedSightingId) ?? null;
 
+  const expandedStand = stands.find((s) => s.id === expandedStandId) ?? null;
+  const expandedSeries = expandedStand ? (seriesByStandId[expandedStand.id] ?? null) : null;
+  const nowMs = Date.now();
+  const targetMs = nowMs + offsetMinutes * 60 * 1000;
+  const targetHour = new Date(targetMs).getHours();
+  // Same time-adjustable resolver StandDetailScreen's own time slider already uses — the
+  // scent cone and StandQuickView's wind readout both read off this, so dragging the
+  // slider moves the cone exactly the way the full detail screen's compass dial would.
+  const resolved = expandedStand
+    ? resolveConditionsAtTime({
+        targetMs,
+        nowMs,
+        liveWind: wind,
+        windSensorConnected,
+        windHistory,
+        weatherSeries: expandedSeries,
+      })
+    : null;
+  const expandedTemperatureTrend = expandedStand ? assessTemperatureTrend(expandedSeries, targetMs) : null;
+
   return (
     <View style={styles.container}>
       {maps ? (
@@ -205,11 +243,15 @@ export function MapScreen() {
             sightingPins={sightingPins}
             onSelectSighting={setSelectedSightingId}
             draftPin={draftPin}
+            expandedStandId={expandedStandId}
+            expandedWind={resolved?.wind ?? null}
           />
-          <View style={styles.floatingControls}>
-            <RecenterButton onPress={handleRecenter} busy={recentering} />
-            <MapTypeToggle value={mapType} onChange={setMapType} />
-          </View>
+          {!expandedStand && (
+            <View style={styles.floatingControls}>
+              <RecenterButton onPress={handleRecenter} busy={recentering} />
+              <MapTypeToggle value={mapType} onChange={setMapType} />
+            </View>
+          )}
         </>
       ) : (
         <View style={styles.fallback}>
@@ -219,7 +261,23 @@ export function MapScreen() {
         </View>
       )}
 
-      <StandsDropdown snapshots={snapshots} activeStandId={activeStandId} onSelectStand={handleSelectStand} />
+      {!expandedStand && (
+        <StandsDropdown snapshots={snapshots} activeStandId={activeStandId} onSelectStand={handleSelectStand} />
+      )}
+
+      <StandQuickView
+        stand={expandedStand}
+        offsetMinutes={offsetMinutes}
+        onChangeOffset={setOffsetMinutes}
+        windDirectionDeg={resolved?.wind?.directionDeg ?? null}
+        windSpeedMph={resolved?.wind?.speedMph ?? null}
+        dataSource={resolved?.source ?? 'no-data'}
+        dataLabel={resolved?.label ?? ''}
+        hour={targetHour}
+        temperatureTrend={expandedTemperatureTrend}
+        onClose={handleCloseQuickView}
+        onViewFullDetails={handleViewFullDetails}
+      />
 
       <PinCategoryPicker
         visible={pickerMode != null}
