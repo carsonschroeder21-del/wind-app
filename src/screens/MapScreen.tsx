@@ -97,6 +97,24 @@ export function MapScreen() {
     setOffsetMinutes(0);
   };
 
+  // Dropdown rows can pick a stand far outside the current viewport, unlike tapping a pin
+  // (already visible on screen) — so this additionally pans/zooms the map to it.
+  const handleSelectStandFromDropdown = (id: string) => {
+    handleSelectStand(id);
+    const stand = stands.find((s) => s.id === id);
+    if (stand?.latitude != null && stand?.longitude != null) {
+      mapRef.current?.animateToRegion(
+        {
+          latitude: stand.latitude,
+          longitude: stand.longitude,
+          latitudeDelta: RECENTER_ZOOM_DELTA,
+          longitudeDelta: RECENTER_ZOOM_DELTA,
+        },
+        RECENTER_ANIM_MS,
+      );
+    }
+  };
+
   const handleCloseQuickView = () => setExpandedStandId(null);
 
   const handleViewFullDetails = () => {
@@ -262,7 +280,7 @@ export function MapScreen() {
       )}
 
       {!expandedStand && (
-        <StandsDropdown snapshots={snapshots} activeStandId={activeStandId} onSelectStand={handleSelectStand} />
+        <StandsDropdown snapshots={snapshots} activeStandId={activeStandId} onSelectStand={handleSelectStandFromDropdown} />
       )}
 
       <StandQuickView
