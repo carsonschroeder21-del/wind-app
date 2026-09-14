@@ -48,12 +48,10 @@ export interface WindReading {
   updatedAt: number;
 }
 
-/** How the elevation where the hunter expects game relates to the stand's own elevation.
- * Captured as a relative call rather than a second GPS lookup, since a hunter usually
- * knows this intuitively (e.g. "I'm on a ridge over a creek bottom") even for ground
- * they haven't pinned. */
-export const GAME_AREA_RELATIVE_ELEVATIONS = ['above', 'level', 'below'] as const;
-export type GameAreaRelativeElevation = (typeof GAME_AREA_RELATIVE_ELEVATIONS)[number];
+/** How the elevation where the hunter expects game relates to the stand's own elevation —
+ * auto-detected from the terrain around the stand's pin and its game bearing (see
+ * utils/slope.ts) rather than a manual picker. */
+export type GameAreaRelativeElevation = 'above' | 'level' | 'below';
 
 export type StandMediaType = 'photo360' | 'video360';
 

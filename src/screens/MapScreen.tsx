@@ -9,6 +9,8 @@ import { AllStandsMapView, isLocated } from '../components/AllStandsMap';
 import type { LocatedStand, MapType } from '../components/AllStandsMap';
 import { MapTypeToggle } from '../components/MapTypeToggle';
 import { PinCategoryPicker } from '../components/PinCategoryPicker';
+import { QuickStandSheet } from '../components/QuickStandSheet';
+import type { DraftStandPin, QuickStandSaveInput } from '../components/QuickStandSheet';
 import { RecenterButton } from '../components/RecenterButton';
 import { SightingDetailSheet } from '../components/SightingDetailSheet';
 import { StandEditor } from '../components/StandEditor';
@@ -20,7 +22,6 @@ import { loadMaps } from '../services/maps/loadMaps';
 import { StandDetailScreen } from './StandDetailScreen';
 import { useAppStore } from '../state/store';
 import { palette } from '../theme/palette';
-import type { StandType } from '../types';
 import { isWindUnfavorable } from '../utils/compass';
 import { gameAreaBearingDeg } from '../utils/gameArea';
 import { genId } from '../utils/id';
@@ -31,17 +32,15 @@ import type { PinCategory } from '../utils/pinCategories';
 const RECENTER_ZOOM_DELTA = 0.01;
 const RECENTER_ANIM_MS = 400;
 
-// What's shown in the bottom-sheet Modal — full stand detail, the stand editor (new,
-// prefilled from a long-press pin drop, or editing an existing one), or nothing.
-type MapSheet =
-  | { kind: 'detail'; standId: string }
-  | { kind: 'edit'; standId: string | null; initialLocation?: LatLng; initialStandType?: StandType }
-  | null;
+// What's shown in the bottom-sheet Modal — full stand detail, or editing an existing
+// stand. Creating a new stand no longer goes through this Modal at all — see draftPin.
+type MapSheet = { kind: 'detail'; standId: string } | { kind: 'edit'; standId: string } | null;
 
 export function MapScreen() {
   const stands = useAppStore((s) => s.stands);
   const activeStandId = useAppStore((s) => s.activeStandId);
   const setActiveStandId = useAppStore((s) => s.setActiveStandId);
+  const addStand = useAppStore((s) => s.addStand);
   const wind = useAppStore((s) => s.wind);
   const sightingPins = useAppStore((s) => s.sightingPins);
   const addSightingPin = useAppStore((s) => s.addSightingPin);
@@ -54,9 +53,14 @@ export function MapScreen() {
   const [longPressCoord, setLongPressCoord] = useState<LatLng | null>(null);
   const [pickerMode, setPickerMode] = useState<'all' | 'sighting-only' | null>(null);
   const [selectedSightingId, setSelectedSightingId] = useState<string | null>(null);
+  // A stand-type pick from the long-press menu drops this immediately — rendered on the
+  // map right away with its real icon, at the exact long-press coordinate, before the
+  // stand actually exists — QuickStandSheet turns it into a real saved Stand on Save.
+  const [draftPin, setDraftPin] = useState<DraftStandPin | null>(null);
   const mapRef = useRef<MapViewType>(null);
   const located = useMemo(() => stands.filter(isLocated), [stands]);
   const seriesByStandId = useStandWeatherSeries(located);
+  const activeStand = stands.find((s) => s.id === activeStandId) ?? null;
 
   useEffect(() => {
     // Fires after the map's already mounted/painted (zoomed to fit every saved pin via
@@ -127,7 +131,9 @@ export function MapScreen() {
     if (!coordinate && !changingSightingId) return;
 
     if (category.kind === 'stand') {
-      setSheet({ kind: 'edit', standId: null, initialLocation: coordinate ?? undefined, initialStandType: category.standType });
+      if (coordinate) {
+        setDraftPin({ latitude: coordinate.latitude, longitude: coordinate.longitude, standType: category.standType });
+      }
       return;
     }
 
@@ -158,6 +164,28 @@ export function MapScreen() {
     setSelectedSightingId(null);
   };
 
+  const handleQuickSave = (input: QuickStandSaveInput) => {
+    if (!draftPin) return;
+    const newId = addStand({
+      name: input.name,
+      terrain: input.terrain,
+      standType: draftPin.standType,
+      isEdge: input.isEdge,
+      facingDeg: input.facingDeg,
+      latitude: draftPin.latitude,
+      longitude: draftPin.longitude,
+      elevationFt: input.elevationFt,
+      gameAreaRelativeElevation: input.gameAreaRelativeElevation,
+      media: null,
+      gameAreaLatitude: null,
+      gameAreaLongitude: null,
+      parkingLatitude: null,
+      parkingLongitude: null,
+    });
+    setActiveStandId(newId);
+    setDraftPin(null);
+  };
+
   const maps = loadMaps();
   const selectedSighting = sightingPins.find((p) => p.id === selectedSightingId) ?? null;
 
@@ -176,6 +204,7 @@ export function MapScreen() {
             onLongPress={handleLongPress}
             sightingPins={sightingPins}
             onSelectSighting={setSelectedSightingId}
+            draftPin={draftPin}
           />
           <View style={styles.floatingControls}>
             <RecenterButton onPress={handleRecenter} busy={recentering} />
@@ -199,6 +228,13 @@ export function MapScreen() {
         onSelect={handleSelectCategory}
       />
 
+      <QuickStandSheet
+        draftPin={draftPin}
+        defaultFacingDeg={activeStand?.facingDeg ?? 0}
+        onCancel={() => setDraftPin(null)}
+        onSave={handleQuickSave}
+      />
+
       <SightingDetailSheet
         // Hidden while the "change type" picker is open on top of it, rather than
         // stacking two backdropped sheets at once.
@@ -217,14 +253,7 @@ export function MapScreen() {
               onEdit={() => setSheet({ kind: 'edit', standId: sheet.standId })}
             />
           )}
-          {sheet?.kind === 'edit' && (
-            <StandEditor
-              standId={sheet.standId}
-              initialLocation={sheet.initialLocation ?? null}
-              initialStandType={sheet.initialStandType ?? null}
-              onDone={() => setSheet(null)}
-            />
-          )}
+          {sheet?.kind === 'edit' && <StandEditor standId={sheet.standId} onDone={() => setSheet(null)} />}
         </SafeAreaView>
       </Modal>
     </View>

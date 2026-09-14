@@ -1,20 +1,22 @@
 import Slider from '@react-native-community/slider';
 import { Camera, Check, LocateFixed, Trash2 } from 'lucide-react-native';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import type { LatLng } from 'react-native-maps';
 
-import { fetchElevationFt } from '../services/elevation';
+import { fetchElevationsFt } from '../services/elevation';
 import { getCurrentLocation } from '../services/location';
 import { deleteStandMediaFile, pickStandMedia } from '../services/media/standMedia';
 import { useAppStore } from '../state/store';
 import { palette } from '../theme/palette';
 import { mono } from '../theme/typography';
-import { GAME_AREA_RELATIVE_ELEVATIONS, STAND_TYPES, TERRAIN_TYPES } from '../types';
+import { STAND_TYPES, TERRAIN_TYPES } from '../types';
 import type { GameAreaRelativeElevation, Stand, StandMedia, StandType, Terrain } from '../types';
 import { toCompass } from '../utils/compass';
+import { gameAreaBearingDeg } from '../utils/gameArea';
 import { genId } from '../utils/id';
 import { standTypeStyle } from '../utils/pinCategories';
+import { detectRelativeElevation, slopeSamplePoints } from '../utils/slope';
 import { StandMapPicker } from './StandMapPicker';
 import { ToggleSwitch } from './ToggleSwitch';
 
@@ -28,21 +30,9 @@ interface StandEditorProps {
   /** null when creating a new stand. */
   standId: string | null;
   onDone: () => void;
-  /** Prefills a new stand's location from the Map screen's long-press pin drop, so it
-   * lands exactly where the hunter pressed instead of starting blank. Ignored when
-   * editing an existing stand. */
-  initialLocation?: LatLng | null;
-  /** Prefills a new stand's type from the long-press category picker. Ignored when
-   * editing an existing stand. */
-  initialStandType?: StandType | null;
 }
 
-export function StandEditor({
-  standId: standIdProp,
-  onDone,
-  initialLocation = null,
-  initialStandType = null,
-}: StandEditorProps) {
+export function StandEditor({ standId: standIdProp, onDone }: StandEditorProps) {
   const existing = useAppStore((s) => s.stands.find((st) => st.id === standIdProp) ?? null);
   const activeStand = useAppStore((s) => s.stands.find((st) => st.id === s.activeStandId) ?? null);
   const addStand = useAppStore((s) => s.addStand);
@@ -57,19 +47,21 @@ export function StandEditor({
 
   const [name, setName] = useState(existing?.name ?? '');
   const [terrain, setTerrain] = useState<Terrain>(existing?.terrain ?? 'Timber');
-  const [standType, setStandType] = useState<StandType>(existing?.standType ?? initialStandType ?? 'Open Stand');
+  const [standType, setStandType] = useState<StandType>(existing?.standType ?? 'Open Stand');
   const [isEdge, setIsEdge] = useState(existing?.isEdge ?? false);
   const [facingDeg, setFacingDeg] = useState(existing?.facingDeg ?? activeStand?.facingDeg ?? 0);
-  const [latitude, setLatitude] = useState<number | null>(existing?.latitude ?? initialLocation?.latitude ?? null);
-  const [longitude, setLongitude] = useState<number | null>(existing?.longitude ?? initialLocation?.longitude ?? null);
+  const [latitude, setLatitude] = useState<number | null>(existing?.latitude ?? null);
+  const [longitude, setLongitude] = useState<number | null>(existing?.longitude ?? null);
   const [gameAreaLatitude, setGameAreaLatitude] = useState<number | null>(existing?.gameAreaLatitude ?? null);
   const [gameAreaLongitude, setGameAreaLongitude] = useState<number | null>(existing?.gameAreaLongitude ?? null);
   const [parkingLatitude, setParkingLatitude] = useState<number | null>(existing?.parkingLatitude ?? null);
   const [parkingLongitude, setParkingLongitude] = useState<number | null>(existing?.parkingLongitude ?? null);
   const [elevationFt, setElevationFt] = useState<number | null>(existing?.elevationFt ?? null);
-  const [relativeElevation, setRelativeElevation] = useState<GameAreaRelativeElevation>(
-    existing?.gameAreaRelativeElevation ?? 'level',
-  );
+  // Raw [center, north, south, east, west] elevation samples around the current location —
+  // detectRelativeElevation derives the actual above/level/below call from these plus the
+  // game bearing below, so this only needs to be re-fetched when the location changes, not
+  // on every facing-slider tick.
+  const [elevationSamples, setElevationSamples] = useState<(number | null)[] | null>(null);
   const [media, setMedia] = useState<StandMedia | null>(existing?.media ?? null);
 
   const [locating, setLocating] = useState(false);
@@ -78,6 +70,15 @@ export function StandEditor({
   const [locationError, setLocationError] = useState<string | null>(null);
   const [mediaError, setMediaError] = useState<string | null>(null);
   const [nameError, setNameError] = useState(false);
+
+  const gameBearingDeg = gameAreaBearingDeg({ latitude, longitude, facingDeg, gameAreaLatitude, gameAreaLongitude });
+  // Auto-detected from the local slope + game bearing (see utils/slope.ts) — replaces the
+  // old manual "Game Area Is..." picker, so this needs no hunter input and stays current
+  // with the facing direction/game-area pin without an extra fetch.
+  const relativeElevation = useMemo(
+    () => detectRelativeElevation(elevationSamples, gameBearingDeg),
+    [elevationSamples, gameBearingDeg],
+  );
 
   const handlePickMedia = async () => {
     setMediaError(null);
@@ -108,27 +109,32 @@ export function StandEditor({
   };
 
   /** Single funnel for every way a coordinate can be set — map tap, marker drag, or the
-   * GPS button — so elevation lookup always follows consistently. */
+   * GPS button — so elevation/slope lookup always follows consistently. */
   const handleLocationChange = async (coords: LatLng) => {
     setLatitude(coords.latitude);
     setLongitude(coords.longitude);
     setLocationError(null);
 
     setElevationLoading(true);
-    const ft = await fetchElevationFt(coords.latitude, coords.longitude);
+    const samples = await fetchElevationsFt(slopeSamplePoints(coords));
     setElevationLoading(false);
-    setElevationFt(ft);
+    setElevationSamples(samples);
+    setElevationFt(samples[0]);
   };
 
   useEffect(() => {
-    // Only for a brand-new stand prefilled from the Map screen's long-press pin drop —
-    // the coordinate itself is already set from initial state above, this just runs the
-    // same elevation lookup every other way of setting a location gets.
-    if (!existing && initialLocation) {
+    // Only for a stand that already has a location when the editor opens — the elevation
+    // samples slope-detection needs aren't part of a saved Stand, so an existing stand's
+    // relativeElevation would otherwise show as "level" (no samples yet) until its
+    // location was re-picked. New stands start with no location, so there's nothing to
+    // sample yet; handleLocationChange covers them once one is set.
+    if (existing?.latitude != null && existing?.longitude != null) {
+      const coords = { latitude: existing.latitude, longitude: existing.longitude };
       setElevationLoading(true);
-      fetchElevationFt(initialLocation.latitude, initialLocation.longitude).then((ft) => {
+      fetchElevationsFt(slopeSamplePoints(coords)).then((samples) => {
         setElevationLoading(false);
-        setElevationFt(ft);
+        setElevationSamples(samples);
+        setElevationFt(samples[0]);
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -170,9 +176,10 @@ export function StandEditor({
   const handleRefreshElevation = async () => {
     if (latitude == null || longitude == null) return;
     setElevationLoading(true);
-    const ft = await fetchElevationFt(latitude, longitude);
+    const samples = await fetchElevationsFt(slopeSamplePoints({ latitude, longitude }));
     setElevationLoading(false);
-    setElevationFt(ft);
+    setElevationSamples(samples);
+    setElevationFt(samples[0]);
   };
 
   const handleSave = () => {
@@ -316,27 +323,6 @@ export function StandEditor({
         <Text style={styles.sliderEdgeLabel}>N</Text>
       </View>
 
-      <Text style={styles.sectionLabel}>GAME AREA IS...</Text>
-      <View style={styles.terrainRow}>
-        {GAME_AREA_RELATIVE_ELEVATIONS.map((option) => {
-          const active = relativeElevation === option;
-          return (
-            <Pressable
-              key={option}
-              onPress={() => setRelativeElevation(option)}
-              style={[
-                styles.terrainChip,
-                { backgroundColor: active ? palette.amber : palette.panel, borderColor: active ? palette.amber : palette.line },
-              ]}
-            >
-              <Text style={[styles.terrainChipText, { color: active ? palette.onAmber : palette.textLo }]}>
-                {RELATIVE_ELEVATION_LABELS[option]} stand
-              </Text>
-            </Pressable>
-          );
-        })}
-      </View>
-
       <Text style={styles.sectionLabel}>LOCATION</Text>
       <StandMapPicker latitude={latitude} longitude={longitude} onPick={handleLocationChange} height={200} />
 
@@ -367,6 +353,12 @@ export function StandEditor({
           </Pressable>
         )}
       </View>
+      {latitude != null && longitude != null && (
+        <Text style={styles.mediaHint}>
+          Game area elevation: {elevationLoading ? 'detecting slope…' : `${RELATIVE_ELEVATION_LABELS[relativeElevation]} stand`}{' '}
+          — auto-detected from terrain around the pin and the facing direction/game-area pin, no second pin needed.
+        </Text>
+      )}
 
       <Text style={styles.sectionLabel}>GAME AREA PIN</Text>
       {latitude != null && longitude != null ? (

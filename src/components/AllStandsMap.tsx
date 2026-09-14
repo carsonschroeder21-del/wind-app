@@ -6,7 +6,7 @@ import type { LatLng, LongPressEvent, MapType, Region } from 'react-native-maps'
 import { loadMaps } from '../services/maps/loadMaps';
 import { darkMapStyle } from '../theme/mapStyle';
 import { palette } from '../theme/palette';
-import type { GameSightingPin, Stand, WindReading } from '../types';
+import type { GameSightingPin, Stand, StandType, WindReading } from '../types';
 import { isWindUnfavorable, windTravelDirection } from '../utils/compass';
 import { destinationPoint } from '../utils/geo';
 import { gameAreaBearingDeg } from '../utils/gameArea';
@@ -91,6 +91,10 @@ interface AllStandsMapViewProps {
    * screen, which is the only place they're droppable/visible. */
   sightingPins?: GameSightingPin[];
   onSelectSighting?: (id: string) => void;
+  /** A stand-type pick from the long-press menu, rendered immediately at the exact
+   * long-press coordinate with its real icon before the stand is actually saved — so the
+   * pin shows up the instant a category is chosen rather than only after Save. */
+  draftPin?: { latitude: number; longitude: number; standType: StandType } | null;
 }
 
 /** Bare map + stand pins, filling its parent — no border, no height prop, no "requires a
@@ -111,6 +115,7 @@ export const AllStandsMapView = forwardRef<MapViewType, AllStandsMapViewProps>(f
     onLongPress,
     sightingPins,
     onSelectSighting,
+    draftPin,
   },
   ref,
 ) {
@@ -119,6 +124,8 @@ export const AllStandsMapView = forwardRef<MapViewType, AllStandsMapViewProps>(f
 
   const { MapView, Marker, Polygon, PROVIDER_GOOGLE } = maps;
   const located = stands.filter(isLocated);
+  const draftPinStyle = draftPin ? standTypeStyle(draftPin.standType) : null;
+  const DraftIcon = draftPinStyle?.icon;
 
   return (
     <MapView
@@ -205,6 +212,20 @@ export const AllStandsMapView = forwardRef<MapViewType, AllStandsMapViewProps>(f
           </Marker>
         );
       })}
+
+      {draftPin && draftPinStyle && DraftIcon && (
+        <Marker
+          coordinate={{ latitude: draftPin.latitude, longitude: draftPin.longitude }}
+          anchor={{ x: 0.5, y: 1 }}
+          tracksViewChanges={false}
+        >
+          <View style={styles.markerWrap}>
+            <View style={[styles.pinBadge, { backgroundColor: draftPinStyle.color, borderColor: palette.amber }]}>
+              <DraftIcon size={14} color={palette.textHi} />
+            </View>
+          </View>
+        </Marker>
+      )}
     </MapView>
   );
 });
