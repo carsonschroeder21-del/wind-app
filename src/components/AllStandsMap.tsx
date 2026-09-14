@@ -180,7 +180,7 @@ export const AllStandsMapView = forwardRef<MapViewType, AllStandsMapViewProps>(f
             anchor={resolveStandWind ? { x: 0.5, y: 1 } : undefined}
           >
             {resolveStandWind && (
-              <View style={styles.markerWrap}>
+              <View style={styles.markerWrap} collapsable={false}>
                 <View style={styles.nameLabel}>
                   <Text style={styles.nameLabelText} numberOfLines={1}>
                     {stand.name}
@@ -223,7 +223,7 @@ export const AllStandsMapView = forwardRef<MapViewType, AllStandsMapViewProps>(f
             anchor={{ x: 0.5, y: 1 }}
             onPress={() => onSelectSighting?.(pin.id)}
           >
-            <View style={styles.markerWrap}>
+            <View style={styles.markerWrap} collapsable={false}>
               <View style={[styles.pinBadge, { backgroundColor: style.color, borderColor: palette.textHi }]}>
                 <Icon size={14} color={palette.textHi} />
               </View>
@@ -234,7 +234,7 @@ export const AllStandsMapView = forwardRef<MapViewType, AllStandsMapViewProps>(f
 
       {draftPin && draftPinStyle && DraftIcon && (
         <Marker coordinate={{ latitude: draftPin.latitude, longitude: draftPin.longitude }} anchor={{ x: 0.5, y: 1 }}>
-          <View style={styles.markerWrap}>
+          <View style={styles.markerWrap} collapsable={false}>
             <View style={[styles.pinBadge, { backgroundColor: draftPinStyle.color, borderColor: palette.amber }]}>
               <DraftIcon size={14} color={palette.textHi} />
             </View>
