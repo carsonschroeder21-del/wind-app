@@ -1,7 +1,8 @@
-import { forwardRef } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { forwardRef, useEffect, useMemo, useRef, useState } from 'react';
+import type { MutableRefObject } from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type MapViewType from 'react-native-maps';
-import type { LatLng, LongPressEvent, MapType, Region } from 'react-native-maps';
+import type { LatLng, LongPressEvent, MapType, Point, Region } from 'react-native-maps';
 
 import { loadMaps } from '../services/maps/loadMaps';
 import { darkMapStyle } from '../theme/mapStyle';
@@ -10,7 +11,7 @@ import type { GameSightingPin, Stand, StandType, WindReading } from '../types';
 import { isWindUnfavorable, toCompass, windTravelDirection } from '../utils/compass';
 import { destinationPoint } from '../utils/geo';
 import { gameAreaBearingDeg } from '../utils/gameArea';
-import { GAME_SPECIES_STYLE, standTypeStyle } from '../utils/pinCategories';
+import { sightingPinIcon, standPinIcon } from '../utils/pinAssets';
 
 const DEFAULT_REGION: Region = { latitude: 39.8283, longitude: -98.5795, latitudeDelta: 20, longitudeDelta: 20 };
 const MIN_DELTA = 0.05;
@@ -20,6 +21,14 @@ const BOUNDS_PADDING_FACTOR = 1.6;
 // distance instead of a fixed-size SVG so it reads sensibly at any map zoom level.
 const CONE_HALF_ANGLE_DEG = 16;
 const CONE_DISTANCE_M = 300;
+
+// Icon-badge markers are 28pt circles (see assets/pins) anchored at their exact center
+// (0.5, 0.5) — the name/wind labels below are a separate absolutely-positioned overlay,
+// not Marker children, so their geometry has to be worked out by hand from that anchor.
+const BADGE_RADIUS = 14;
+const LABEL_WIDTH = 140;
+const LABEL_GAP = 4;
+const LABEL_STACK_HEIGHT = 46;
 
 function scentConePolygon(pin: { latitude: number; longitude: number }, windDirectionDeg: number) {
   const goingDir = windTravelDirection(windDirectionDeg);
@@ -108,7 +117,19 @@ interface AllStandsMapViewProps {
  * can silently omit the whole feature rather than show StandScreen's fallback copy over a
  * compass dial). `AllStandsMap` below wraps this for its own bordered-card presentation;
  * this is the one real map-rendering implementation both share. Forwards the underlying
- * `react-native-maps` ref so a caller can call `animateToRegion` for a smooth pan/zoom. */
+ * `react-native-maps` ref so a caller can call `animateToRegion` for a smooth pan/zoom.
+ *
+ * Marker *icon* — never custom View `children` — is what actually renders a pin's glyph.
+ * react-native-maps snapshots a Marker's children into a bitmap to hand off to the native
+ * map SDK, and that snapshot step is broken under Fabric on both Android (react-native-maps
+ * #5836) and iOS (Fabric Marker support landed after this app's SDK-pinned version) — pins
+ * with custom children simply don't render at all. The `icon` prop sidesteps the whole
+ * snapshot mechanism by handing the native SDK a real bundled image instead, which is why
+ * every marker below uses pre-rendered PNGs (utils/pinAssets.ts) rather than a Lucide icon
+ * in a View. The always-on stand name + wind-direction labels can't be pre-rendered (their
+ * text is dynamic), so they're drawn as a plain absolutely-positioned overlay above the
+ * MapView instead, kept aligned to each pin via `pointForCoordinate` — a different, simple
+ * imperative native call that was never part of the broken children-snapshot path. */
 export const AllStandsMapView = forwardRef<MapViewType, AllStandsMapViewProps>(function AllStandsMapView(
   {
     stands,
@@ -128,120 +149,157 @@ export const AllStandsMapView = forwardRef<MapViewType, AllStandsMapViewProps>(f
   ref,
 ) {
   const maps = loadMaps();
+  const internalMapRef = useRef<MapViewType | null>(null);
+  const [mapReady, setMapReady] = useState(false);
+  const [labelPoints, setLabelPoints] = useState<Record<string, Point>>({});
+
+  const located = useMemo(() => stands.filter(isLocated), [stands]);
+  const locatedKey = located.map((s) => `${s.id}:${s.latitude.toFixed(6)},${s.longitude.toFixed(6)}`).join('|');
+
+  const setMapRef = (instance: MapViewType | null) => {
+    internalMapRef.current = instance;
+    if (typeof ref === 'function') ref(instance);
+    else if (ref) (ref as MutableRefObject<MapViewType | null>).current = instance;
+  };
+
+  const recomputeLabelPoints = () => {
+    const map = internalMapRef.current;
+    if (!map || !resolveStandWind || located.length === 0) {
+      setLabelPoints({});
+      return;
+    }
+    Promise.all(
+      located.map(async (stand) => {
+        try {
+          const point = await map.pointForCoordinate({ latitude: stand.latitude, longitude: stand.longitude });
+          return [stand.id, point] as const;
+        } catch {
+          return [stand.id, null] as const;
+        }
+      }),
+    ).then((entries) => {
+      const next: Record<string, Point> = {};
+      for (const [id, point] of entries) if (point) next[id] = point;
+      setLabelPoints(next);
+    });
+  };
+
+  const hasWindResolver = resolveStandWind != null;
+  useEffect(() => {
+    if (mapReady) recomputeLabelPoints();
+    // recomputeLabelPoints and resolveStandWind itself are intentionally omitted:
+    // resolveStandWind is a fresh closure every MapScreen render (it reads live wind/time
+    // state), but only its *position* inputs (mapReady, which stands exist and where) need
+    // a re-projection via pointForCoordinate — the label text/color already re-renders off
+    // the latest resolveStandWind on every render regardless, so keying this effect on the
+    // function identity would re-run it on every wind tick and slider drag for no reason.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mapReady, locatedKey, hasWindResolver]);
+
   if (!maps) return null;
 
   const { MapView, Marker, Polygon, PROVIDER_GOOGLE } = maps;
-  const located = stands.filter(isLocated);
-  const draftPinStyle = draftPin ? standTypeStyle(draftPin.standType) : null;
-  const DraftIcon = draftPinStyle?.icon;
   const expandedStand = expandedStandId ? located.find((s) => s.id === expandedStandId) : undefined;
 
   return (
-    <MapView
-      ref={ref}
-      style={StyleSheet.absoluteFill}
-      provider={PROVIDER_GOOGLE}
-      initialRegion={initialRegion ?? regionForStands(located)}
-      customMapStyle={darkMapStyle}
-      showsUserLocation={showsUserLocation}
-      mapType={mapType}
-      onLongPress={onLongPress ? (e: LongPressEvent) => onLongPress(e.nativeEvent.coordinate) : undefined}
-    >
-      {expandedStand &&
-        expandedWind &&
-        (() => {
-          const gameBearingDeg = gameAreaBearingDeg(expandedStand);
-          const isBad = isWindUnfavorable(expandedWind.directionDeg, gameBearingDeg);
-          const coneColor = isBad ? palette.bad : palette.good;
+    <View style={StyleSheet.absoluteFill}>
+      <MapView
+        ref={setMapRef}
+        style={StyleSheet.absoluteFill}
+        provider={PROVIDER_GOOGLE}
+        initialRegion={initialRegion ?? regionForStands(located)}
+        customMapStyle={darkMapStyle}
+        showsUserLocation={showsUserLocation}
+        mapType={mapType}
+        onLongPress={onLongPress ? (e: LongPressEvent) => onLongPress(e.nativeEvent.coordinate) : undefined}
+        onMapReady={() => setMapReady(true)}
+        onRegionChangeComplete={() => recomputeLabelPoints()}
+      >
+        {expandedStand &&
+          expandedWind &&
+          (() => {
+            const gameBearingDeg = gameAreaBearingDeg(expandedStand);
+            const isBad = isWindUnfavorable(expandedWind.directionDeg, gameBearingDeg);
+            const coneColor = isBad ? palette.bad : palette.good;
+            return (
+              <Polygon
+                coordinates={scentConePolygon(expandedStand, expandedWind.directionDeg)}
+                fillColor={`${coneColor}55`}
+                strokeColor={coneColor}
+                strokeWidth={1.5}
+              />
+            );
+          })()}
+
+        {located.map((stand) => {
+          const isActive = stand.id === activeStandId;
           return (
-            <Polygon
-              coordinates={scentConePolygon(expandedStand, expandedWind.directionDeg)}
-              fillColor={`${coneColor}55`}
-              strokeColor={coneColor}
-              strokeWidth={1.5}
+            <Marker
+              key={stand.id}
+              coordinate={{ latitude: stand.latitude, longitude: stand.longitude }}
+              title={stand.name}
+              description={`${stand.terrain}${stand.isEdge ? ' · Edge' : ''}`}
+              icon={standPinIcon(stand.standType, isActive)}
+              onPress={() => onSelectStand(stand.id)}
+              anchor={{ x: 0.5, y: 0.5 }}
             />
           );
-        })()}
+        })}
 
-      {located.map((stand) => {
-        const isActive = stand.id === activeStandId;
-        const style = standTypeStyle(stand.standType);
-        const Icon = style.icon;
-        const nowWind = resolveStandWind?.(stand) ?? null;
-        const windIsBad = nowWind ? isWindUnfavorable(nowWind.directionDeg, gameAreaBearingDeg(stand)) : null;
-        return (
+        {sightingPins?.map((pin) => (
           <Marker
-            key={stand.id}
-            coordinate={{ latitude: stand.latitude, longitude: stand.longitude }}
-            title={stand.name}
-            description={`${stand.terrain}${stand.isEdge ? ' · Edge' : ''}`}
-            pinColor={isActive ? palette.amber : palette.gameDir}
-            onPress={() => onSelectStand(stand.id)}
-            anchor={resolveStandWind ? { x: 0.5, y: 1 } : undefined}
-          >
-            {resolveStandWind && (
-              <View style={styles.markerWrap} collapsable={false}>
+            key={pin.id}
+            coordinate={{ latitude: pin.latitude, longitude: pin.longitude }}
+            title={pin.species}
+            icon={sightingPinIcon(pin.species)}
+            anchor={{ x: 0.5, y: 0.5 }}
+            onPress={() => onSelectSighting?.(pin.id)}
+          />
+        ))}
+
+        {draftPin && (
+          <Marker
+            coordinate={{ latitude: draftPin.latitude, longitude: draftPin.longitude }}
+            icon={standPinIcon(draftPin.standType, true)}
+            anchor={{ x: 0.5, y: 0.5 }}
+          />
+        )}
+      </MapView>
+
+      {resolveStandWind && (
+        <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
+          {located.map((stand) => {
+            const point = labelPoints[stand.id];
+            if (!point) return null;
+            const nowWind = resolveStandWind(stand) ?? null;
+            const windIsBad = nowWind ? isWindUnfavorable(nowWind.directionDeg, gameAreaBearingDeg(stand)) : null;
+            return (
+              <Pressable
+                key={stand.id}
+                onPress={() => onSelectStand(stand.id)}
+                style={[
+                  styles.labelAnchor,
+                  { left: point.x - LABEL_WIDTH / 2, top: point.y - BADGE_RADIUS - LABEL_GAP - LABEL_STACK_HEIGHT },
+                ]}
+              >
                 <View style={styles.nameLabel}>
                   <Text style={styles.nameLabelText} numberOfLines={1}>
                     {stand.name}
                   </Text>
                 </View>
                 {nowWind && (
-                  <View
-                    style={[
-                      styles.windLabel,
-                      { borderColor: windIsBad ? palette.bad : palette.good },
-                    ]}
-                  >
+                  <View style={[styles.windLabel, { borderColor: windIsBad ? palette.bad : palette.good }]}>
                     <Text style={[styles.windLabelText, { color: windIsBad ? palette.bad : palette.good }]}>
                       {toCompass(nowWind.directionDeg)}
                     </Text>
                   </View>
                 )}
-                <View
-                  style={[
-                    styles.pinBadge,
-                    { backgroundColor: style.color, borderColor: isActive ? palette.amber : palette.textHi },
-                  ]}
-                >
-                  <Icon size={14} color={palette.textHi} />
-                </View>
-              </View>
-            )}
-          </Marker>
-        );
-      })}
-
-      {sightingPins?.map((pin) => {
-        const style = GAME_SPECIES_STYLE[pin.species];
-        const Icon = style.icon;
-        return (
-          <Marker
-            key={pin.id}
-            coordinate={{ latitude: pin.latitude, longitude: pin.longitude }}
-            title={pin.species}
-            anchor={{ x: 0.5, y: 1 }}
-            onPress={() => onSelectSighting?.(pin.id)}
-          >
-            <View style={styles.markerWrap} collapsable={false}>
-              <View style={[styles.pinBadge, { backgroundColor: style.color, borderColor: palette.textHi }]}>
-                <Icon size={14} color={palette.textHi} />
-              </View>
-            </View>
-          </Marker>
-        );
-      })}
-
-      {draftPin && draftPinStyle && DraftIcon && (
-        <Marker coordinate={{ latitude: draftPin.latitude, longitude: draftPin.longitude }} anchor={{ x: 0.5, y: 1 }}>
-          <View style={styles.markerWrap} collapsable={false}>
-            <View style={[styles.pinBadge, { backgroundColor: draftPinStyle.color, borderColor: palette.amber }]}>
-              <DraftIcon size={14} color={palette.textHi} />
-            </View>
-          </View>
-        </Marker>
+              </Pressable>
+            );
+          })}
+        </View>
       )}
-    </MapView>
+    </View>
   );
 });
 
@@ -287,9 +345,15 @@ export function AllStandsMap({ stands, activeStandId, onSelectStand, height = 36
 }
 
 const styles = StyleSheet.create({
-  markerWrap: { alignItems: 'center' },
+  labelAnchor: {
+    position: 'absolute',
+    width: LABEL_WIDTH,
+    height: LABEL_STACK_HEIGHT,
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+  },
   nameLabel: {
-    maxWidth: 140,
+    maxWidth: LABEL_WIDTH,
     marginBottom: 3,
     paddingHorizontal: 6,
     paddingVertical: 2,
@@ -300,7 +364,6 @@ const styles = StyleSheet.create({
   },
   nameLabelText: { color: palette.textHi, fontSize: 10, fontWeight: '600' },
   windLabel: {
-    marginBottom: 3,
     paddingHorizontal: 5,
     paddingVertical: 1,
     borderRadius: 4,
@@ -308,14 +371,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   windLabelText: { fontSize: 9, fontWeight: '700', letterSpacing: 0.5 },
-  pinBadge: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    borderWidth: 2,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   mapBox: { borderRadius: 8, overflow: 'hidden', borderWidth: 1, borderColor: palette.line },
   hint: { color: palette.textLo, fontSize: 11, marginTop: 8 },
   fallback: {
