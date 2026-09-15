@@ -1,5 +1,4 @@
-import { forwardRef, useEffect, useMemo, useRef, useState } from 'react';
-import type { MutableRefObject } from 'react';
+import { forwardRef, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type MapViewType from 'react-native-maps';
 import type { LatLng, LongPressEvent, MapType, Point, Region } from 'react-native-maps';
@@ -29,6 +28,24 @@ const BADGE_RADIUS = 14;
 const LABEL_WIDTH = 140;
 const LABEL_GAP = 4;
 const LABEL_STACK_HEIGHT = 46;
+
+// Linear lat/lng -> screen-pixel projection from the map's own region + view size, kept in
+// perfect lockstep with `onRegionChange` (which fires continuously during a pan/zoom
+// gesture, not just once it ends). This used to go through `pointForCoordinate`, an async
+// native bridge call — correct, but only ever resolved after a gesture finished, so labels
+// visibly lagged the map and then snapped into place. Plain synchronous math has no such
+// lag; it's a flat-Mercator approximation (ignores tilt/rotation, which this map never
+// uses), close enough at typical hunting-map zoom levels that any residual error is
+// sub-pixel.
+function projectToScreen(
+  point: { latitude: number; longitude: number },
+  region: Region,
+  layout: { width: number; height: number },
+): Point {
+  const x = ((point.longitude - (region.longitude - region.longitudeDelta / 2)) / region.longitudeDelta) * layout.width;
+  const y = ((region.latitude + region.latitudeDelta / 2 - point.latitude) / region.latitudeDelta) * layout.height;
+  return { x, y };
+}
 
 function scentConePolygon(pin: { latitude: number; longitude: number }, windDirectionDeg: number) {
   const goingDir = windTravelDirection(windDirectionDeg);
@@ -121,15 +138,23 @@ interface AllStandsMapViewProps {
  *
  * Marker *icon* — never custom View `children` — is what actually renders a pin's glyph.
  * react-native-maps snapshots a Marker's children into a bitmap to hand off to the native
- * map SDK, and that snapshot step is broken under Fabric on both Android (react-native-maps
- * #5836) and iOS (Fabric Marker support landed after this app's SDK-pinned version) — pins
- * with custom children simply don't render at all. The `icon` prop sidesteps the whole
- * snapshot mechanism by handing the native SDK a real bundled image instead, which is why
- * every marker below uses pre-rendered PNGs (utils/pinAssets.ts) rather than a Lucide icon
- * in a View. The always-on stand name + wind-direction labels can't be pre-rendered (their
- * text is dynamic), so they're drawn as a plain absolutely-positioned overlay above the
- * MapView instead, kept aligned to each pin via `pointForCoordinate` — a different, simple
- * imperative native call that was never part of the broken children-snapshot path. */
+ * map SDK, and that snapshot step is unreliable under Fabric even in the latest release
+ * (react-native-maps #5836, #5971, #5918, #5965 are all still-open iOS/Android
+ * children-marker Fabric bugs) — pins with custom children can render blank, 0×0, or
+ * mispositioned. Separately, react-native-maps' iOS Fabric support for GoogleMaps
+ * Marker/Polygon at all (not just children) only landed in 1.29.0 — this app now depends
+ * on `^1.29.2` for that, having previously been pinned to the SDK-validated `1.27.2`, which
+ * predates it and left iOS markers blank regardless of children vs. icon. The `icon` prop
+ * sidesteps the children-snapshot bug specifically by handing the native SDK a real bundled
+ * image instead, which is why every marker below uses pre-rendered PNGs (utils/pinAssets.ts)
+ * rather than a Lucide icon in a View. The always-on stand name + wind-direction labels
+ * can't be pre-rendered (their text is dynamic), so they're drawn as a plain
+ * absolutely-positioned overlay above the
+ * MapView instead, kept aligned to each pin via a synchronous lat/lng-to-screen projection
+ * (see `projectToScreen`) driven by `onRegionChange`, rather than the async
+ * `pointForCoordinate` native call this used at first — that only resolved once a
+ * pan/zoom gesture finished, so labels visibly lagged the map and snapped into place
+ * afterward instead of tracking it. */
 export const AllStandsMapView = forwardRef<MapViewType, AllStandsMapViewProps>(function AllStandsMapView(
   {
     stands,
@@ -149,52 +174,10 @@ export const AllStandsMapView = forwardRef<MapViewType, AllStandsMapViewProps>(f
   ref,
 ) {
   const maps = loadMaps();
-  const internalMapRef = useRef<MapViewType | null>(null);
-  const [mapReady, setMapReady] = useState(false);
-  const [labelPoints, setLabelPoints] = useState<Record<string, Point>>({});
-
   const located = useMemo(() => stands.filter(isLocated), [stands]);
-  const locatedKey = located.map((s) => `${s.id}:${s.latitude.toFixed(6)},${s.longitude.toFixed(6)}`).join('|');
-
-  const setMapRef = (instance: MapViewType | null) => {
-    internalMapRef.current = instance;
-    if (typeof ref === 'function') ref(instance);
-    else if (ref) (ref as MutableRefObject<MapViewType | null>).current = instance;
-  };
-
-  const recomputeLabelPoints = () => {
-    const map = internalMapRef.current;
-    if (!map || !resolveStandWind || located.length === 0) {
-      setLabelPoints({});
-      return;
-    }
-    Promise.all(
-      located.map(async (stand) => {
-        try {
-          const point = await map.pointForCoordinate({ latitude: stand.latitude, longitude: stand.longitude });
-          return [stand.id, point] as const;
-        } catch {
-          return [stand.id, null] as const;
-        }
-      }),
-    ).then((entries) => {
-      const next: Record<string, Point> = {};
-      for (const [id, point] of entries) if (point) next[id] = point;
-      setLabelPoints(next);
-    });
-  };
-
-  const hasWindResolver = resolveStandWind != null;
-  useEffect(() => {
-    if (mapReady) recomputeLabelPoints();
-    // recomputeLabelPoints and resolveStandWind itself are intentionally omitted:
-    // resolveStandWind is a fresh closure every MapScreen render (it reads live wind/time
-    // state), but only its *position* inputs (mapReady, which stands exist and where) need
-    // a re-projection via pointForCoordinate — the label text/color already re-renders off
-    // the latest resolveStandWind on every render regardless, so keying this effect on the
-    // function identity would re-run it on every wind tick and slider drag for no reason.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mapReady, locatedKey, hasWindResolver]);
+  const startingRegion = initialRegion ?? regionForStands(located);
+  const [region, setRegion] = useState<Region>(startingRegion);
+  const [layout, setLayout] = useState<{ width: number; height: number } | null>(null);
 
   if (!maps) return null;
 
@@ -202,18 +185,17 @@ export const AllStandsMapView = forwardRef<MapViewType, AllStandsMapViewProps>(f
   const expandedStand = expandedStandId ? located.find((s) => s.id === expandedStandId) : undefined;
 
   return (
-    <View style={StyleSheet.absoluteFill}>
+    <View style={StyleSheet.absoluteFill} onLayout={(e) => setLayout({ width: e.nativeEvent.layout.width, height: e.nativeEvent.layout.height })}>
       <MapView
-        ref={setMapRef}
+        ref={ref}
         style={StyleSheet.absoluteFill}
         provider={PROVIDER_GOOGLE}
-        initialRegion={initialRegion ?? regionForStands(located)}
+        initialRegion={startingRegion}
         customMapStyle={darkMapStyle}
         showsUserLocation={showsUserLocation}
         mapType={mapType}
         onLongPress={onLongPress ? (e: LongPressEvent) => onLongPress(e.nativeEvent.coordinate) : undefined}
-        onMapReady={() => setMapReady(true)}
-        onRegionChangeComplete={() => recomputeLabelPoints()}
+        onRegionChange={setRegion}
       >
         {expandedStand &&
           expandedWind &&
@@ -266,11 +248,10 @@ export const AllStandsMapView = forwardRef<MapViewType, AllStandsMapViewProps>(f
         )}
       </MapView>
 
-      {resolveStandWind && (
+      {resolveStandWind && layout && (
         <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
           {located.map((stand) => {
-            const point = labelPoints[stand.id];
-            if (!point) return null;
+            const point = projectToScreen(stand, region, layout);
             const nowWind = resolveStandWind(stand) ?? null;
             const windIsBad = nowWind ? isWindUnfavorable(nowWind.directionDeg, gameAreaBearingDeg(stand)) : null;
             return (
